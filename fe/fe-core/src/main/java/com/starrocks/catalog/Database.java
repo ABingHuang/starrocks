@@ -479,6 +479,9 @@ public class Database extends MetaObject implements Writable {
             Table table = Table.read(in);
             nameToTable.put(table.getName(), table);
             idToTable.put(table.getId(), table);
+            if (table.getType() == TableType.MATERIALIZEDVIEW) {
+                Catalog.getCurrentCatalog().getMaterializedViewManager().registerMaterializedView((MaterializedView) table);
+            }
         }
 
         // read quota

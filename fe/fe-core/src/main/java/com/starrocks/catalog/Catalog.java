@@ -41,6 +41,7 @@ import com.starrocks.alter.AlterJob;
 import com.starrocks.alter.AlterJob.JobType;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
+import com.starrocks.alter.MaterializedViewManager;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.AddPartitionClause;
@@ -441,6 +442,8 @@ public class Catalog {
 
     private StarOSAgent starOSAgent;
 
+    private MaterializedViewManager materializedViewManager;
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
             // get all
@@ -618,6 +621,7 @@ public class Catalog {
         this.analyzeManager = new AnalyzeManager();
 
         this.starOSAgent = new StarOSAgent();
+        this.materializedViewManager = new MaterializedViewManager();
     }
 
     public static void destroyCheckpoint() {
@@ -752,6 +756,10 @@ public class Catalog {
 
     public StarOSAgent getStarOSAgent() {
         return starOSAgent;
+    }
+
+    public MaterializedViewManager getMaterializedViewManager() {
+        return materializedViewManager;
     }
 
     // Use tryLock to avoid potential dead lock

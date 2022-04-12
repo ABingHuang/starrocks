@@ -240,6 +240,10 @@ struct TOlapTable {
     1: required string tableName
 }
 
+struct TMaterializedView {
+    1: optional string mvName
+}
+
 struct TMySQLTable {
   1: required string host
   2: required string port
@@ -351,6 +355,7 @@ struct TTableDescriptor {
   14: optional TBrokerTable BrokerTable
   15: optional TEsTable esTable
   16: optional TJDBCTable jdbcTable
+  17: optional TMaterializedView materializedView
 
   // Hdfs Table schema
   30: optional THdfsTable hdfsTable
