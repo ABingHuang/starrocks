@@ -165,6 +165,7 @@ import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
+import com.starrocks.load.InsertOverwriteJobManager;
 import com.starrocks.load.Load;
 import com.starrocks.load.loadv2.LoadEtlChecker;
 import com.starrocks.load.loadv2.LoadJobScheduler;
@@ -397,8 +398,8 @@ public class GlobalStateMgr {
     private MetadataMgr metadataMgr;
     private CatalogMgr catalogMgr;
     private ConnectorMgr connectorMgr;
-
     private TaskManager taskManager;
+    private InsertOverwriteJobManager insertOverwriteJobManager;
 
     private LocalMetastore localMetastore;
     private NodeMgr nodeMgr;
@@ -554,6 +555,7 @@ public class GlobalStateMgr {
         this.connectorMgr = new ConnectorMgr(metadataMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
+        this.insertOverwriteJobManager = new InsertOverwriteJobManager();
     }
 
     public static void destroyCheckpoint() {
@@ -704,6 +706,10 @@ public class GlobalStateMgr {
 
     public TaskManager getTaskManager() {
         return taskManager;
+    }
+
+    public InsertOverwriteJobManager getInsertOverwriteJobManager() {
+        return insertOverwriteJobManager;
     }
 
     // Use tryLock to avoid potential dead lock
@@ -942,6 +948,7 @@ public class GlobalStateMgr {
             startMasterOnlyDaemonThreads();
             // start other daemon threads that should running on all FE
             startNonMasterDaemonThreads();
+            insertOverwriteJobManager.cancelRunningJobs();
 
             MetricRepo.init();
 
@@ -1136,6 +1143,7 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = taskManager.loadTasks(dis, checksum);
             remoteChecksum = dis.readLong();
+            checksum = loadInsertOverwriteJobs(dis, checksum);
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1302,6 +1310,20 @@ public class GlobalStateMgr {
         return checksum;
     }
 
+    public long loadInsertOverwriteJobs(DataInputStream dis, long checksum) throws IOException {
+        try {
+            this.insertOverwriteJobManager = InsertOverwriteJobManager.read(dis);
+        } catch (EOFException e) {
+            LOG.warn("no InsertOverwriteJobManager to replay.", e);
+        }
+        return checksum;
+    }
+
+    public long saveInsertOverwriteJobs(DataOutputStream dos, long checksum) throws IOException {
+        getInsertOverwriteJobManager().write(dos);
+        return checksum;
+    }
+
     public long loadResources(DataInputStream in, long checksum) throws IOException {
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_87) {
             resourceMgr = ResourceMgr.read(in);
@@ -1367,6 +1389,7 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = taskManager.saveTasks(dos, checksum);
             dos.writeLong(checksum);
+            checksum = saveInsertOverwriteJobs(dos, checksum);
         }
 
         long saveImageEndTime = System.currentTimeMillis();
@@ -2949,6 +2972,11 @@ public class GlobalStateMgr {
 
         LOG.info("finished dumpping image to {}", dumpFilePath);
         return dumpFilePath;
+    }
+
+    public List<Partition> createTempPartitionsFromPartitions(Database db, Table table,
+                                                              String namePostfix, List<Long> sourcePartitionIds) {
+        return localMetastore.createTempPartitionsFromPartitions(db, table, namePostfix, sourcePartitionIds);
     }
 
     public void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
