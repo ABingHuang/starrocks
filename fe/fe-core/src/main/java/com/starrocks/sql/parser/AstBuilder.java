@@ -263,7 +263,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.label == null ? null : context.label.getText(),
                 targetColumnNames,
                 queryStatement,
-                Lists.newArrayList());
+                Lists.newArrayList(),
+                context.OVERWRITE() != null ? true : false);
     }
 
     @Override

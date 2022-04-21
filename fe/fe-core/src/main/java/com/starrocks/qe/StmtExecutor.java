@@ -73,6 +73,8 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.EtlJobType;
+import com.starrocks.load.InsertOverwriteJob;
+import com.starrocks.load.InsertOverwriteJobManager;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.metric.MetricRepo;
@@ -82,6 +84,7 @@ import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.persist.CreateInsertOverwriteJobInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
@@ -125,6 +128,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
@@ -1016,6 +1020,21 @@ public class StmtExecutor {
                 }
                 context.setState(e.getQueryState());
             }
+            return;
+        }
+
+        if (stmt instanceof InsertStmt && ((InsertStmt) stmt).isOverwrite()) {
+            LOG.info("start to handle insert overwrite job");
+            InsertOverwriteJob insertOverwriteJob =
+                    new InsertOverwriteJob(context, Catalog.getCurrentCatalog().getNextId(), (InsertStmt) stmt);
+            // add edit log
+            CreateInsertOverwriteJobInfo info = new CreateInsertOverwriteJobInfo(insertOverwriteJob.getJobId(),
+                    insertOverwriteJob.getTargetDbId(), insertOverwriteJob.getTargetTableId(), stmt.toSql());
+            Catalog.getCurrentCatalog().getEditLog().logCreateInsertOverwrite(info);
+            InsertOverwriteJobManager manager = Catalog.getCurrentCatalog().getInsertOverwriteJobManager();
+            Future future = manager.submitJob(insertOverwriteJob);
+            future.get();
+            LOG.info("execute insert overwrite success");
             return;
         }
 

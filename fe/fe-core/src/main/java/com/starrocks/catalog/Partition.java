@@ -129,6 +129,10 @@ public class Partition extends MetaObject implements Writable {
         return this.id;
     }
 
+    public void setId(long id) {
+        this.id = id;
+    }
+
     public void setName(String newName) {
         this.name = newName;
     }
@@ -345,6 +349,11 @@ public class Partition extends MetaObject implements Writable {
         }
         LOG.info("visualise the shadow index: {}", shadowIndexId);
         return true;
+    }
+
+    public Partition clone() {
+        Partition partition = new Partition(id, name, baseIndex, distributionInfo);
+        return partition;
     }
 
     public static Partition read(DataInput in, PartitionInfo partitionInfo) throws IOException {

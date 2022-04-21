@@ -126,6 +126,7 @@ public class InsertStmt extends DmlStmt {
     private DataPartition dataPartition;
 
     private List<Column> targetColumns = Lists.newArrayList();
+    private boolean isOverwrite;
 
     /*
      * InsertStmt may be analyzed twice, but transaction must be only begun once.
@@ -147,13 +148,14 @@ public class InsertStmt extends DmlStmt {
     }
 
     public InsertStmt(InsertTarget target, String label, List<String> cols, QueryStatement queryStatement,
-                      List<String> hints) {
+                      List<String> hints, boolean isOverwrite) {
         this.tblName = target.getTblName();
         this.targetPartitionNames = target.getPartitionNames();
         this.label = label;
         this.queryStatement = queryStatement;
         this.planHints = hints;
         this.targetColumnNames = cols;
+        this.isOverwrite = isOverwrite;
 
         if (!Strings.isNullOrEmpty(label)) {
             isUserSpecifiedLabel = true;
@@ -195,6 +197,14 @@ public class InsertStmt extends DmlStmt {
 
     public String getDb() {
         return tblName.getDb();
+    }
+
+    public boolean isOverwrite() {
+        return isOverwrite;
+    }
+
+    public void setOverwrite(boolean overwrite) {
+        isOverwrite = overwrite;
     }
 
     // TODO(zc): used to get all dbs for lock

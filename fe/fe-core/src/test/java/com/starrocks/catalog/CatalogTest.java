@@ -30,6 +30,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.load.Load;
 import com.starrocks.meta.MetaContext;
 import mockit.Expectations;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -47,8 +49,51 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.CompletableFuture;
 
 public class CatalogTest {
+    private static final Logger LOG = LogManager.getLogger(CatalogTest.class);
+
+    @Test
+    public void doTest() {
+        CompletableFuture future = CompletableFuture.runAsync(() -> {
+            try {
+                System.out.println("start to sleep");
+                LOG.info("start to sleep");
+                Thread.sleep(1000000000);
+                LOG.info("finish sleep");
+                System.out.println("finish to sleep");
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            } finally {
+                System.out.println("exit from sleep");
+            }
+        });
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        System.out.println("is done:" + future.isDone());
+
+        /*
+        try {
+            future.get(1, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        } catch (ExecutionException e) {
+            e.printStackTrace();
+        } catch (TimeoutException e) {
+            e.printStackTrace();
+        }
+
+         */
+
+        System.out.println("start to cancel");
+        future.cancel(true);
+        System.out.println("cancel is done");
+        System.out.println("is done:" + future.isDone());
+    }
 
     @Before
     public void setUp() {

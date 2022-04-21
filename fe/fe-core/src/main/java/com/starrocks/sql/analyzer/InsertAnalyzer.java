@@ -39,7 +39,12 @@ public class InsertAnalyzer {
         Database database = MetaUtils.getStarRocks(session, insertStmt.getTableName());
         Table table = MetaUtils.getStarRocksTable(session, insertStmt.getTableName());
 
-        if (!(table instanceof OlapTable) && !(table instanceof MysqlTable)) {
+        if (insertStmt.isOverwrite()) {
+            if (!(table instanceof OlapTable)) {
+                // TODO: add support for MaterializedView
+                throw unsupportedException("Only support insert overwrite olap table");
+            }
+        } else if (!(table instanceof OlapTable) && !(table instanceof MysqlTable)) {
             throw unsupportedException("Only support insert into olap table or mysql table");
         }
 
@@ -80,6 +85,7 @@ public class InsertAnalyzer {
                 }
             }
         }
+        // TODO: add support to MaterializedView
 
         // Build target columns
         List<Column> targetColumns;

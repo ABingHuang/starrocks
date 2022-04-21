@@ -157,6 +157,7 @@ import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
+import com.starrocks.load.InsertOverwriteJobManager;
 import com.starrocks.load.Load;
 import com.starrocks.load.LoadErrorHub;
 import com.starrocks.load.loadv2.LoadEtlChecker;
@@ -445,6 +446,8 @@ public class Catalog {
 
     private MaterializedViewManager materializedViewManager;
 
+    private InsertOverwriteJobManager insertOverwriteJobManager;
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
             // get all
@@ -623,6 +626,7 @@ public class Catalog {
 
         this.starOSAgent = new StarOSAgent();
         this.materializedViewManager = new MaterializedViewManager();
+        this.insertOverwriteJobManager = new InsertOverwriteJobManager();
     }
 
     public static void destroyCheckpoint() {
@@ -761,6 +765,10 @@ public class Catalog {
 
     public MaterializedViewManager getMaterializedViewManager() {
         return materializedViewManager;
+    }
+
+    public InsertOverwriteJobManager getInsertOverwriteJobManager() {
+        return insertOverwriteJobManager;
     }
 
     // Use tryLock to avoid potential dead lock
@@ -6891,6 +6899,62 @@ public class Catalog {
 
         LOG.info("finished dumpping image to {}", dumpFilePath);
         return dumpFilePath;
+    }
+
+    // create new partitions from source partitions.
+    // new partitions have the same indexes as source partitions.
+    public List<Partition> createTempPartitionsFromPartitions(Database db, OlapTable olapTable,
+                                                              String namePostfix, List<Long> sourcePartitionIds) {
+        OlapTable copiedTbl;
+        Map<String, Long> origPartitions = Maps.newHashMap();
+        db.readLock();
+        try {
+            if (olapTable.getState() != OlapTableState.NORMAL) {
+                throw new RuntimeException("Table' state is not NORMAL: " + olapTable.getState()
+                        + ", tableId:" + olapTable.getId() + ", tabletName:" + olapTable.getName());
+            }
+
+            sourcePartitionIds.stream().map(id -> origPartitions.put(olapTable.getPartition(id).getName(), id));
+            copiedTbl = olapTable.selectiveCopy(origPartitions.keySet(), true, IndexExtState.VISIBLE);
+        } finally {
+            db.readUnlock();
+        }
+
+        // 2. use the copied table to create partitions
+        List<Partition> newPartitions = Lists.newArrayListWithCapacity(sourcePartitionIds.size());
+        // tabletIdSet to save all newly created tablet ids.
+        Set<Long> tabletIdSet = Sets.newHashSet();
+        try {
+            for (Map.Entry<String, Long> entry : origPartitions.entrySet()) {
+                long oldPartitionId = entry.getValue();
+                long newPartitionId = getNextId();
+                String newPartitionName = entry.getKey() + namePostfix;
+                if (olapTable.checkPartitionNameExist(newPartitionName, true)) {
+                    // to prevent creating the same partitions when failover
+                    // this will happen when OverwriteJob crashed after created temp partitions, but before changing to PREPARED state
+                    LOG.warn("partition:{} already exists in table:{}", newPartitionName, olapTable.getName());
+                    continue;
+                }
+                PartitionInfo partitionInfo = copiedTbl.getPartitionInfo();
+                partitionInfo.setTabletType(newPartitionId, partitionInfo.getTabletType(oldPartitionId));
+                partitionInfo.setIsInMemory(newPartitionId, partitionInfo.getIsInMemory(oldPartitionId));
+                partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(oldPartitionId));
+                partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(oldPartitionId));
+
+                Partition newPartition =
+                        createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
+                newPartitions.add(newPartition);
+            }
+            buildPartitions(db, copiedTbl, newPartitions);
+        } catch (Exception e) {
+            // create partition failed, remove all newly created tablets
+            for (Long tabletId : tabletIdSet) {
+                Catalog.getCurrentInvertedIndex().deleteTablet(tabletId);
+            }
+            LOG.warn("create partitions from partitions failed.", e);
+            throw new RuntimeException("create partitions failed", e);
+        }
+        return newPartitions;
     }
 
     /*

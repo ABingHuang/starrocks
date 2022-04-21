@@ -62,6 +62,7 @@ import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ClusterInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ConsistencyCheckInfo;
+import com.starrocks.persist.CreateInsertOverwriteJobInfo;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DropDbInfo;
@@ -71,6 +72,7 @@ import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.HbPackage;
+import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
@@ -575,6 +577,16 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_REMOVE_ANALYZER_JOB: {
                 data = AnalyzeJob.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_CREATE_INSERT_OVERWRITE: {
+                data = CreateInsertOverwriteJobInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE: {
+                data = InsertOverwriteStateChangeInfo.read(in);
                 isRead = true;
                 break;
             }

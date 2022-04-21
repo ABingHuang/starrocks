@@ -14,7 +14,7 @@ singleStatement
 statement
     : queryStatement                                                                    #statementDefault
     | explainDesc queryStatement                                                        #explain
-    | explainDesc? INSERT INTO qualifiedName
+    | explainDesc? INSERT (INTO | OVERWRITE) qualifiedName
         (WITH LABEL label=identifier)? columnAliases?
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*)) #insert
     | CREATE TABLE (IF NOT EXISTS)? qualifiedName
@@ -549,4 +549,5 @@ nonReserved
     | VIEW | VERBOSE
     | WEEK
     | YEAR
+    | OVERWRITE
     ;

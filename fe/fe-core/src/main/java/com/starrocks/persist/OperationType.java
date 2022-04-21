@@ -203,4 +203,7 @@ public class OperationType {
 
     // workgroup 10021 ~ 10030
     public static final short OP_WORKGROUP = 10021;
+
+    public static final short OP_CREATE_INSERT_OVERWRITE = 10070;
+    public static final short OP_INSERT_OVERWRITE_STATE_CHANGE = 10071;
 }
