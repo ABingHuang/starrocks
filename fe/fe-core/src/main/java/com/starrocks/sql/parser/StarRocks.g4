@@ -224,7 +224,7 @@ dropFrontendClause
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
-    : explainDesc? INSERT INTO qualifiedName partitionNames?
+    : explainDesc? INSERT (INTO | OVERWRITE) qualifiedName partitionNames?
         (WITH LABEL label=identifier)? columnAliases?
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
     ;
@@ -824,4 +824,5 @@ nonReserved
     | VARIABLES | VIEW | VERBOSE
     | WEEK
     | YEAR
+    | OVERWRITE
     ;

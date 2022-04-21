@@ -476,6 +476,14 @@ public class DatabaseTransactionMgr {
             if (table == null) {
                 throw new MetaNotFoundException("Table does not exist: " + tableId);
             }
+            boolean hasRunningJobs =
+                    GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager().hasRunningOverwriteJob(
+                            transactionId, tableId, tableToPartition.get(tableId));
+            LOG.info("hasRunningJobs:{}, txnId:{}", hasRunningJobs, transactionId);
+            if (hasRunningJobs) {
+                throw new TransactionCommitFailedException("There are running insert" +
+                        " overwrite jobs for the target table and partitions");
+            }
             for (Partition partition : table.getAllPartitions()) {
                 if (!tableToPartition.get(tableId).contains(partition.getId())) {
                     continue;
@@ -1334,6 +1342,7 @@ public class DatabaseTransactionMgr {
             OlapTable table = (OlapTable) db.getTable(tableId);
             for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
                 long partitionId = partitionCommitInfo.getPartitionId();
+                LOG.info("commit txn for partitionId:" + partitionId);
                 Partition partition = table.getPartition(partitionId);
                 if (!partition.isUseStarOS()) {
                     List<MaterializedIndex> allIndices =
