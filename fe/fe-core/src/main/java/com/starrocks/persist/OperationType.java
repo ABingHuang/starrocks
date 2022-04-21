@@ -228,4 +228,7 @@ public class OperationType {
 
     // manage system node info 10091 ~ 10110
     public static final short OP_UPDATE_FRONTEND = 10091;
+
+    public static final short OP_CREATE_INSERT_OVERWRITE = 10111;
+    public static final short OP_INSERT_OVERWRITE_STATE_CHANGE = 10112;
 }
