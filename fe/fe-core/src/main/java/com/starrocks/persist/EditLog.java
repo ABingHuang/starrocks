@@ -822,6 +822,16 @@ public class EditLog {
                             (DropCatalogLog) journal.getData();
                     globalStateMgr.getCatalogMgr().replayDropCatalog(dropCatalogLog);
                 }
+                case OperationType.OP_CREATE_INSERT_OVERWRITE: {
+                    CreateInsertOverwriteJobInfo jobInfo = (CreateInsertOverwriteJobInfo) journal.getData();
+                    globalStateMgr.getInsertOverwriteJobManager().replayCreateInsertOverwrite(jobInfo);
+                    break;
+                }
+                case OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE: {
+                    InsertOverwriteStateChangeInfo stateChangeInfo = (InsertOverwriteStateChangeInfo) journal.getData();
+                    globalStateMgr.getInsertOverwriteJobManager().replayInsertOverwriteStateChange(stateChangeInfo);
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1398,5 +1408,13 @@ public class EditLog {
 
     public void logModifyTableColumn(ModifyTableColumnOperationLog log) {
         logEdit(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, log);
+    }
+
+    public void logCreateInsertOverwrite(CreateInsertOverwriteJobInfo info) {
+        logEdit(OperationType.OP_CREATE_INSERT_OVERWRITE, info);
+    }
+
+    public void logInsertOverwriteStateChange(InsertOverwriteStateChangeInfo info) {
+        logEdit(OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE, info);
     }
 }

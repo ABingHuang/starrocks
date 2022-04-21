@@ -215,6 +215,7 @@ import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
+import com.starrocks.load.InsertOverwriteJobManager;
 import com.starrocks.load.Load;
 import com.starrocks.load.LoadErrorHub;
 import com.starrocks.load.loadv2.LoadEtlChecker;
@@ -509,8 +510,8 @@ public class GlobalStateMgr {
     private MetadataMgr metadataMgr;
     private CatalogMgr catalogMgr;
     private ConnectorMgr connectorMgr;
-
     private TaskManager taskManager;
+    private InsertOverwriteJobManager insertOverwriteJobManager;
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
@@ -694,6 +695,7 @@ public class GlobalStateMgr {
         this.connectorMgr = new ConnectorMgr(metadataMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
+        this.insertOverwriteJobManager = new InsertOverwriteJobManager();
     }
 
     public static void destroyCheckpoint() {
@@ -844,6 +846,10 @@ public class GlobalStateMgr {
 
     public TaskManager getTaskManager() {
         return taskManager;
+    }
+
+    public InsertOverwriteJobManager getInsertOverwriteJobManager() {
+        return insertOverwriteJobManager;
     }
 
     // Use tryLock to avoid potential dead lock
@@ -1382,6 +1388,7 @@ public class GlobalStateMgr {
             startMasterOnlyDaemonThreads();
             // start other daemon threads that should running on all FE
             startNonMasterDaemonThreads();
+            insertOverwriteJobManager.cancelRunningJobs();
 
             MetricRepo.init();
 
@@ -1655,6 +1662,8 @@ public class GlobalStateMgr {
             checksum = loadAnalyze(dis, checksum);
             remoteChecksum = dis.readLong();
             checksum = loadWorkGroups(dis, checksum);
+            remoteChecksum = dis.readLong();
+            checksum = loadInsertOverwriteJobs(dis, checksum);
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1992,6 +2001,15 @@ public class GlobalStateMgr {
         return checksum;
     }
 
+    public long loadInsertOverwriteJobs(DataInputStream dis, long checksum) throws IOException {
+        try {
+            this.insertOverwriteJobManager = InsertOverwriteJobManager.read(dis);
+        } catch (EOFException e) {
+            LOG.warn("no InsertOverwriteJobManager to replay.", e);
+        }
+        return checksum;
+    }
+
     public long saveDeleteHandler(DataOutputStream dos, long checksum) throws IOException {
         getDeleteHandler().write(dos);
         return checksum;
@@ -1999,6 +2017,11 @@ public class GlobalStateMgr {
 
     public long saveWorkGroups(DataOutputStream dos, long checksum) throws IOException {
         getWorkGroupMgr().write(dos);
+        return checksum;
+    }
+
+    public long saveInsertOverwriteJobs(DataOutputStream dos, long checksum) throws IOException {
+        getInsertOverwriteJobManager().write(dos);
         return checksum;
     }
 
@@ -2133,6 +2156,8 @@ public class GlobalStateMgr {
             checksum = saveAnalyze(dos, checksum);
             dos.writeLong(checksum);
             checksum = saveWorkGroups(dos, checksum);
+            dos.writeLong(checksum);
+            checksum = saveInsertOverwriteJobs(dos, checksum);
         }
 
         long saveImageEndTime = System.currentTimeMillis();
@@ -3628,9 +3653,14 @@ public class GlobalStateMgr {
                 olapTable.addPartition(partition);
             }
 
-            ((RangePartitionInfo) partitionInfo).unprotectHandleNewSinglePartitionDesc(partition.getId(),
-                    info.isTempPartition(), info.getRange(), info.getDataProperty(), info.getReplicationNum(),
-                    info.isInMemory());
+            if (partitionInfo.getType() == PartitionType.RANGE) {
+                ((RangePartitionInfo) partitionInfo).unprotectHandleNewSinglePartitionDesc(partition.getId(),
+                        info.isTempPartition(), info.getRange(), info.getDataProperty(), info.getReplicationNum(),
+                        info.isInMemory());
+            } else {
+                partitionInfo.addPartition(
+                        partition.getId(), info.getDataProperty(), info.getReplicationNum(), info.isInMemory());
+            }
 
             if (!isCheckpointThread()) {
                 // add to inverted index
@@ -7049,6 +7079,62 @@ public class GlobalStateMgr {
 
         LOG.info("finished dumpping image to {}", dumpFilePath);
         return dumpFilePath;
+    }
+
+    // create new partitions from source partitions.
+    // new partitions have the same indexes as source partitions.
+    public List<Partition> createTempPartitionsFromPartitions(Database db, OlapTable olapTable,
+                                                              String namePostfix, List<Long> sourcePartitionIds) {
+        OlapTable copiedTbl;
+        Map<Long, String> origPartitions = Maps.newHashMap();
+        db.readLock();
+        try {
+            if (olapTable.getState() != OlapTableState.NORMAL) {
+                throw new RuntimeException("Table' state is not NORMAL: " + olapTable.getState()
+                        + ", tableId:" + olapTable.getId() + ", tabletName:" + olapTable.getName());
+            }
+            for (Long id : sourcePartitionIds) {
+                origPartitions.put(id, olapTable.getPartition(id).getName());
+            }
+            copiedTbl = olapTable.selectiveCopy(origPartitions.values(), true, IndexExtState.VISIBLE);
+        } finally {
+            db.readUnlock();
+        }
+
+        // 2. use the copied table to create partitions
+        List<Partition> newPartitions = Lists.newArrayListWithCapacity(sourcePartitionIds.size());
+        // tabletIdSet to save all newly created tablet ids.
+        Set<Long> tabletIdSet = Sets.newHashSet();
+        try {
+            for (Long sourcePartitionId : sourcePartitionIds) {
+                long newPartitionId = getNextId();
+                String newPartitionName = origPartitions.get(sourcePartitionId) + namePostfix;
+                if (olapTable.checkPartitionNameExist(newPartitionName, true)) {
+                    // to prevent creating the same partitions when failover
+                    // this will happen when OverwriteJob crashed after created temp partitions, but before changing to PREPARED state
+                    LOG.warn("partition:{} already exists in table:{}", newPartitionName, olapTable.getName());
+                    continue;
+                }
+                PartitionInfo partitionInfo = copiedTbl.getPartitionInfo();
+                partitionInfo.setTabletType(newPartitionId, partitionInfo.getTabletType(sourcePartitionId));
+                partitionInfo.setIsInMemory(newPartitionId, partitionInfo.getIsInMemory(sourcePartitionId));
+                partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(sourcePartitionId));
+                partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(sourcePartitionId));
+
+                Partition newPartition =
+                        createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
+                newPartitions.add(newPartition);
+            }
+            buildPartitions(db, copiedTbl, newPartitions);
+        } catch (Exception e) {
+            // create partition failed, remove all newly created tablets
+            for (Long tabletId : tabletIdSet) {
+                getCurrentInvertedIndex().deleteTablet(tabletId);
+            }
+            LOG.warn("create partitions from partitions failed.", e);
+            throw new RuntimeException("create partitions failed", e);
+        }
+        return newPartitions;
     }
 
     /*

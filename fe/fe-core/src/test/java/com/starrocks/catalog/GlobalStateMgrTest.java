@@ -50,7 +50,6 @@ import java.util.Map;
 import java.util.Random;
 
 public class GlobalStateMgrTest {
-
     @Before
     public void setUp() {
         MetaContext metaContext = new MetaContext();

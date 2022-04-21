@@ -216,4 +216,6 @@ public class OperationType {
     // drop external catalog
     public static final short OP_DROP_CATALOG = 10061;
 
+    public static final short OP_CREATE_INSERT_OVERWRITE = 10070;
+    public static final short OP_INSERT_OVERWRITE_STATE_CHANGE = 10071;
 }
