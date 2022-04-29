@@ -76,7 +76,7 @@ public class InsertOverwriteJob implements Writable {
     public InsertOverwriteJob(ConnectContext context, long jobId, InsertStmt insertStmt) {
         this.context = context;
         this.jobId = jobId;
-        this.jobState.set(OverwriteJobState.PENDING);
+        this.jobState = new AtomicReference<>(OverwriteJobState.PENDING);
         this.insertStmt = insertStmt;
         this.targetTable = (OlapTable) insertStmt.getTargetTable();
         this.db = Catalog.getCurrentCatalog().getDb(insertStmt.getDb());
@@ -88,7 +88,7 @@ public class InsertOverwriteJob implements Writable {
         this.context = new ConnectContext();
         context.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         this.jobId = jobId;
-        this.jobState.set(OverwriteJobState.PENDING);
+        this.jobState = new AtomicReference<>(OverwriteJobState.PENDING);
         this.db = Catalog.getCurrentCatalog().getDb(dbId);
         this.targetTable = (OlapTable) db.getTable(tableId);
 
