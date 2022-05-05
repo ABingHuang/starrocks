@@ -4,7 +4,6 @@ package com.starrocks.load;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.persist.CreateInsertOverwriteJobInfo;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import org.apache.logging.log4j.LogManager;
