@@ -4,6 +4,7 @@ package com.starrocks.load;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.persist.CreateInsertOverwriteJobInfo;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import org.apache.logging.log4j.LogManager;
@@ -34,6 +35,7 @@ public class InsertOverwriteJobManager {
         this.partitionsWithOverwrite = Maps.newHashMap();
         // TODO: add named and limited thread pool
         this.overwriteJobExecutorService = Executors.newCachedThreadPool();
+        this.lock = new ReentrantReadWriteLock();
     }
 
     public InsertOverwriteJob getOverwriteJob(long jobId) {
