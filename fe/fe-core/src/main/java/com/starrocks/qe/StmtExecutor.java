@@ -1029,7 +1029,7 @@ public class StmtExecutor {
                     new InsertOverwriteJob(context, Catalog.getCurrentCatalog().getNextId(), (InsertStmt) stmt);
             // add edit log
             CreateInsertOverwriteJobInfo info = new CreateInsertOverwriteJobInfo(insertOverwriteJob.getJobId(),
-                    insertOverwriteJob.getTargetDbId(), insertOverwriteJob.getTargetTableId(), stmt.toSql());
+                    insertOverwriteJob.getTargetDbId(), insertOverwriteJob.getTargetTableId(), stmt.getOrigStmt().originStmt);
             LOG.info("create insert overwrite job info:{}", info);
             Catalog.getCurrentCatalog().getEditLog().logCreateInsertOverwrite(info);
             InsertOverwriteJobManager manager = Catalog.getCurrentCatalog().getInsertOverwriteJobManager();
