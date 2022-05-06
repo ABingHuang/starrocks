@@ -6,11 +6,13 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.persist.CreateInsertOverwriteJobInfo;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
+import jersey.repackaged.com.google.common.collect.Sets;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -23,7 +25,7 @@ public class InsertOverwriteJobManager {
     private Map<Long, InsertOverwriteJob> overwriteJobMap;
 
     // tableId -> partitionId list
-    private Map<Long, List<Long>> partitionsWithOverwrite;
+    private Map<Long, Set<Long>> partitionsWithOverwrite;
 
     private ExecutorService overwriteJobExecutorService;
 
@@ -65,16 +67,28 @@ public class InsertOverwriteJobManager {
             if (overwriteJobMap.containsKey(job.getJobId())) {
                 return false;
             }
-            if (partitionsWithOverwrite.containsKey(job.getTargetTableName())) {
-                List<Long> partitionsWithJob = partitionsWithOverwrite.get(job.getTargetTableName());
+            // check whether there is a overwrite job running in partitions
+            if (hasRunningOverwriteJob(job.getTargetTableId(), job.getTargetPartitionIds())) {
+                return false;
+            }
+            // 需要区分分区表和非分区表
+            /*
+            if (partitionsWithOverwrite.containsKey(job.getTargetTableId())) {
+                Set<Long> partitionsWithJob = partitionsWithOverwrite.get(job.getTargetTableId());
+                if (partitionsWithJob == null) {
+                    // it means the table has running insert overwrite job
+                    return false;
+                }
                 List<Long> partitionsToAdd = job.getTargetPartitionIds();
                 if (partitionsToAdd.stream().anyMatch(id -> partitionsWithJob.contains(id))) {
                     LOG.warn("table:{} has already running insert overwrite job.", job.getTargetTableName());
                     return false;
                 }
             }
+
+             */
             overwriteJobMap.put(job.getJobId(), job);
-            List<Long> partitions = partitionsWithOverwrite.getOrDefault(job.getTargetTableName(), Lists.newArrayList());
+            Set<Long> partitions = partitionsWithOverwrite.getOrDefault(job.getTargetTableId(), Sets.newHashSet());
             partitions.addAll(job.getTargetPartitionIds());
             return true;
         } catch (Exception  e) {
@@ -86,17 +100,22 @@ public class InsertOverwriteJobManager {
     }
 
     public boolean deregisterOverwriteJob(long jobid) {
-        LOG.info("start to deregister overwrite job");
+        LOG.info("start to deregister overwrite job:{}", jobid);
         lock.writeLock().lock();
         try {
             if (!overwriteJobMap.containsKey(jobid)) {
                 return true;
             }
             InsertOverwriteJob job = overwriteJobMap.get(jobid);
-            List<Long> partitionIds = partitionsWithOverwrite.get(job.getTargetTableName());
-            partitionIds.removeAll(job.getTargetPartitionIds());
-            if (partitionIds.isEmpty()) {
-                partitionsWithOverwrite.remove(job.getTargetTableName());
+            Set<Long> partitionIds = partitionsWithOverwrite.get(job.getTargetTableId());
+            LOG.info("deregister partitions:{}", partitionIds);
+            if (partitionIds != null) {
+                partitionIds.removeAll(job.getTargetPartitionIds());
+                if (partitionIds.isEmpty()) {
+                    partitionsWithOverwrite.remove(job.getTargetTableId());
+                }
+            } else {
+                partitionsWithOverwrite.remove(job.getTargetTableId());
             }
             return true;
         } catch (Exception e) {
@@ -107,19 +126,19 @@ public class InsertOverwriteJobManager {
         }
     }
 
-    public boolean hasRunningOverwriteJob(String tableName) {
+    public boolean hasRunningOverwriteJob(Long tableId) {
         lock.readLock().lock();
         try {
-            return partitionsWithOverwrite.containsKey(tableName);
+            return partitionsWithOverwrite.containsKey(tableId);
         } finally {
             lock.readLock().unlock();
         }
     }
 
-    public boolean hasRunningOverwriteJob(String tableName, List<Long> partitions) {
+    public boolean hasRunningOverwriteJob(Long tableId, List<Long> partitions) {
         lock.readLock().lock();
         try {
-            boolean tableExist = partitionsWithOverwrite.containsKey(tableName);
+            boolean tableExist = partitionsWithOverwrite.containsKey(tableId);
             if (!tableExist) {
                 return false;
             }
@@ -127,7 +146,10 @@ public class InsertOverwriteJobManager {
                 // means check table
                 return true;
             }
-            List<Long> runningPartitions = partitionsWithOverwrite.get(tableName);
+            Set<Long> runningPartitions = partitionsWithOverwrite.get(tableId);
+            if (runningPartitions == null) {
+                return true;
+            }
             if (partitions.stream().anyMatch(pId -> runningPartitions.contains(pId))) {
                 return true;
             }

@@ -97,6 +97,7 @@ public class InsertOverwriteJob implements Writable {
         try {
             stmts = com.starrocks.sql.parser.SqlParser.parse(originInsertSql, context.getSessionVariable().getSqlMode());
         } catch (ParsingException parsingException) {
+            LOG.warn("parse sql error. originInsertSql:{}", originInsertSql, parsingException);
             throw new AnalysisException(parsingException.getMessage());
         }
         this.insertStmt = (InsertStmt) stmts.get(0);

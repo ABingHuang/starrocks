@@ -1030,6 +1030,7 @@ public class StmtExecutor {
             // add edit log
             CreateInsertOverwriteJobInfo info = new CreateInsertOverwriteJobInfo(insertOverwriteJob.getJobId(),
                     insertOverwriteJob.getTargetDbId(), insertOverwriteJob.getTargetTableId(), stmt.toSql());
+            LOG.info("create insert overwrite job info:{}", info);
             Catalog.getCurrentCatalog().getEditLog().logCreateInsertOverwrite(info);
             InsertOverwriteJobManager manager = Catalog.getCurrentCatalog().getInsertOverwriteJobManager();
             Future future = manager.submitJob(insertOverwriteJob);
