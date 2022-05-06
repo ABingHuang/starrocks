@@ -202,7 +202,8 @@ public class InsertOverwriteJob implements Writable {
                 startLoad();
                 break;
             case LOADING:
-                waitLoad();
+                // waitLoad();
+                executeInsert();
                 break;
             case COMMITTING:
                 commit();
@@ -252,14 +253,17 @@ public class InsertOverwriteJob implements Writable {
             if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
                 // ((CreateTableAsSelectStmt) parsedStmt).dropTable(context);
                 // drop temp partitions
-                LOG.info("execute insert failed, jobId:{}", jobId);
-                throw new RuntimeException("insert failed");
+                LOG.warn("execute insert failed, jobId:{}", jobId);
+                // throw new RuntimeException("insert failed");
+                transferTo(OverwriteJobState.FAILED);
+                return;
             }
+            transferTo(OverwriteJobState.COMMITTING);
             // init loadFuture and add listener
         } catch (Throwable t) {
             LOG.warn("insert overwrite job:{} failed", jobId, t);
             // ((CreateTableAsSelectStmt) parsedStmt).dropTable(context);
-            throw new RuntimeException("insert overwrite job failed", t);
+            // throw new RuntimeException("insert overwrite job failed", t);
         }
     }
 
@@ -405,9 +409,12 @@ public class InsertOverwriteJob implements Writable {
             }
 
             // execute insert stmt
+            /*
             loadFuture = CompletableFuture.runAsync(() -> {
                 executeInsert();
             }, loadExecutorService);
+
+             */
             transferTo(OverwriteJobState.LOADING);
         } catch (Exception e) {
             LOG.warn("insert overwrite job:{} failed in loading.", jobId, e);
