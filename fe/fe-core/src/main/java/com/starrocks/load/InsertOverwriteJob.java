@@ -143,15 +143,16 @@ public class InsertOverwriteJob implements Writable {
         return true;
     }
 
-    public void run() {
+    public OverwriteJobState run() {
         handle();
+        return jobState.get();
     }
 
-    public void restart() {
+    public OverwriteJobState restart() {
         LOG.info("restart insert overwrite job:{}", jobId);
         gc();
         jobState.set(OverwriteJobState.PENDING);
-        run();
+        return run();
     }
 
     public void replayStateChange(InsertOverwriteStateChangeInfo info) {

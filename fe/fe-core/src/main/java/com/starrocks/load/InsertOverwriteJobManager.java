@@ -47,11 +47,12 @@ public class InsertOverwriteJobManager {
         }
     }
 
-    public Future submitJob(InsertOverwriteJob job) {
-        CompletableFuture future = CompletableFuture.runAsync(() -> {
+    public Future<Boolean> submitJob(InsertOverwriteJob job) {
+        CompletableFuture<Boolean> future = CompletableFuture.supplyAsync(() -> {
             try {
                 registerOverwriteJob(job);
-                job.run();
+                InsertOverwriteJob.OverwriteJobState state = job.run();
+                return state == InsertOverwriteJob.OverwriteJobState.SUCCESS;
             } finally {
                 deregisterOverwriteJob(job.getJobId());
             }
