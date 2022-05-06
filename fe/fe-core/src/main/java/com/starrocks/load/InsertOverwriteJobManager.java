@@ -2,7 +2,6 @@
 
 package com.starrocks.load;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.persist.CreateInsertOverwriteJobInfo;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
