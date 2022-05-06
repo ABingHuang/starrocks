@@ -396,7 +396,7 @@ public class InsertOverwriteJob implements Writable {
             db.readLock();
             try {
                 List<Long> newPartitionIds = newPartitionNames.stream()
-                        .map(partitionName -> targetTable.getPartition(partitionName).getId()).collect(Collectors.toList());
+                        .map(partitionName -> targetTable.getPartition(partitionName, true).getId()).collect(Collectors.toList());
                 LOG.info("newPartitionIds:{}",
                         Strings.join(newPartitionIds.stream().map(id -> id.toString()).collect(Collectors.toList()), ","));
                 insertStmt.setTargetPartitionIds(newPartitionIds);
