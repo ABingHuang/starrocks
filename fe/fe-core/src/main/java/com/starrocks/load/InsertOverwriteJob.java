@@ -25,6 +25,7 @@ import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 
 import java.io.DataOutput;
 import java.io.IOException;
@@ -268,6 +269,9 @@ public class InsertOverwriteJob implements Writable {
         newPartitionNames = sourcePartitionNames.stream().map(name -> name + postfix).collect(Collectors.toList());
         List<Partition> newTempPartitions = Catalog.getCurrentCatalog().createTempPartitionsFromPartitions(
                 db, targetTable, postfix, insertStmt.getTargetPartitionIds());
+        LOG.info("postfix:{}, sourcePartitionNames:{}, newPartitionNames:{}, newTempPartitions size:{}",
+                postfix, Strings.join(sourcePartitionNames, ","), Strings.join(newPartitionNames, ","),
+                newTempPartitions.size());
         db.writeLock();
         try {
             for (Partition partition : newTempPartitions) {
@@ -290,12 +294,14 @@ public class InsertOverwriteJob implements Writable {
 
             AddPartitionsInfo infos = new AddPartitionsInfo(partitionInfoList);
             Catalog.getCurrentCatalog().getEditLog().logAddPartitions(infos);
+            LOG.info("create temp partition finished");
         } finally {
             db.writeUnlock();
         }
     }
 
     private void gc() {
+        LOG.info("start to garbage collect");
         if (loadFuture != null) {
             boolean ret = loadFuture.cancel(true);
             if (!ret) {
@@ -334,6 +340,7 @@ public class InsertOverwriteJob implements Writable {
                 boolean ret = doCommit();
                 if (ret) {
                     transferTo(OverwriteJobState.SUCCESS);
+                    LOG.info("commit success, jobId:{}", jobId);
                     return;
                 }
             } catch (Exception exp) {
@@ -367,10 +374,13 @@ public class InsertOverwriteJob implements Writable {
         }
         try {
             // modify all the partitions in insertStmt
+            LOG.info("start to load, jobId:{}", jobId);
             db.readLock();
             try {
                 List<Long> newPartitionIds = newPartitionNames.stream()
                         .map(partitionName -> targetTable.getPartition(partitionName).getId()).collect(Collectors.toList());
+                LOG.info("newPartitionIds:{}",
+                        Strings.join(newPartitionIds.stream().map(id -> id.toString()).collect(Collectors.toList()), ","));
                 insertStmt.setTargetPartitionIds(newPartitionIds);
             } finally {
                 db.readUnlock();
