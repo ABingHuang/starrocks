@@ -10,6 +10,8 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
@@ -275,26 +277,37 @@ public class InsertOverwriteJob implements Writable {
                 newTempPartitions.size());
         db.writeLock();
         try {
-            for (Partition partition : newTempPartitions) {
-                targetTable.addTempPartition(partition);
+            PartitionInfo partitionInfo = targetTable.getPartitionInfo();
+            if (partitionInfo.getType() == PartitionType.RANGE) {
+                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                for (int i = 0; i < newTempPartitions.size(); i++) {
+                    targetTable.addTempPartition(newTempPartitions.get(i));
+
+                    long sourcePartitionId = sourcePartitions.get(i).getId();
+                    partitionInfo.addPartition(newTempPartitions.get(i).getId(),
+                            rangePartitionInfo.getDataProperty(sourcePartitionId),
+                            rangePartitionInfo.getReplicationNum(sourcePartitionId),
+                            rangePartitionInfo.getIsInMemory(sourcePartitionId));
+                }
+                List<PartitionPersistInfo> partitionInfoList = Lists.newArrayListWithCapacity(newTempPartitions.size());
+                for (int i = 0; i < newTempPartitions.size(); i++) {
+                    Partition partition = newTempPartitions.get(i);
+                    PartitionPersistInfo info =
+                            new PartitionPersistInfo(db.getId(), targetTable.getId(), partition,
+                                    rangePartitionInfo.getRange(partition.getId()),
+                                    rangePartitionInfo.getDataProperty(partition.getId()),
+                                    rangePartitionInfo.getReplicationNum(partition.getId()),
+                                    rangePartitionInfo.getIsInMemory(partition.getId()),
+                                    true);
+                    partitionInfoList.add(info);
+                }
+
+                AddPartitionsInfo infos = new AddPartitionsInfo(partitionInfoList);
+                Catalog.getCurrentCatalog().getEditLog().logAddPartitions(infos);
+            } else {
+                throw new RuntimeException("do not support unpartitioned type table");
             }
 
-            List<PartitionPersistInfo> partitionInfoList = Lists.newArrayListWithCapacity(newTempPartitions.size());
-            for (int i = 0; i < newTempPartitions.size(); i++) {
-                Partition partition = newTempPartitions.get(i);
-                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) targetTable.getPartitionInfo();
-                PartitionPersistInfo info =
-                        new PartitionPersistInfo(db.getId(), targetTable.getId(), partition,
-                                rangePartitionInfo.getRange(partition.getId()),
-                                rangePartitionInfo.getDataProperty(partition.getId()),
-                                rangePartitionInfo.getReplicationNum(partition.getId()),
-                                rangePartitionInfo.getIsInMemory(partition.getId()),
-                                true);
-                partitionInfoList.add(info);
-            }
-
-            AddPartitionsInfo infos = new AddPartitionsInfo(partitionInfoList);
-            Catalog.getCurrentCatalog().getEditLog().logAddPartitions(infos);
             LOG.info("create temp partition finished");
         } finally {
             db.writeUnlock();
@@ -312,8 +325,10 @@ public class InsertOverwriteJob implements Writable {
         db.writeLock();
         try {
             // pay attention to failover and edit log info
-            for (String partitionName : newPartitionNames) {
-                targetTable.dropTempPartition(partitionName, true);
+            if (newPartitionNames != null) {
+                for (String partitionName : newPartitionNames) {
+                    targetTable.dropTempPartition(partitionName, true);
+                }
             }
         } finally {
             db.writeUnlock();
