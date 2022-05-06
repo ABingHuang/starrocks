@@ -284,7 +284,8 @@ public class InsertOverwriteJob implements Writable {
                     targetTable.addTempPartition(newTempPartitions.get(i));
 
                     long sourcePartitionId = sourcePartitions.get(i).getId();
-                    rangePartitionInfo.setRange(newTempPartitions.get(i).getId(), true, rangePartitionInfo.getRange(sourcePartitionId));
+                    rangePartitionInfo.setRange(newTempPartitions.get(i).getId(), true,
+                            rangePartitionInfo.getRange(sourcePartitionId));
                     rangePartitionInfo.addPartition(newTempPartitions.get(i).getId(),
                             rangePartitionInfo.getDataProperty(sourcePartitionId),
                             rangePartitionInfo.getReplicationNum(sourcePartitionId),
