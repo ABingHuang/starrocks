@@ -6913,8 +6913,9 @@ public class Catalog {
                 throw new RuntimeException("Table' state is not NORMAL: " + olapTable.getState()
                         + ", tableId:" + olapTable.getId() + ", tabletName:" + olapTable.getName());
             }
-
-            sourcePartitionIds.stream().map(id -> origPartitions.put(olapTable.getPartition(id).getName(), id));
+            for (Long id : sourcePartitionIds) {
+                origPartitions.put(olapTable.getPartition(id).getName(), id);
+            }
             copiedTbl = olapTable.selectiveCopy(origPartitions.keySet(), true, IndexExtState.VISIBLE);
         } finally {
             db.readUnlock();
