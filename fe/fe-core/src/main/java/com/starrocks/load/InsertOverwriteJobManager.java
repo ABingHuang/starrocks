@@ -86,6 +86,7 @@ public class InsertOverwriteJobManager {
     }
 
     public boolean deregisterOverwriteJob(long jobid) {
+        LOG.info("start to deregister overwrite job");
         lock.writeLock().lock();
         try {
             if (!overwriteJobMap.containsKey(jobid)) {
@@ -100,7 +101,7 @@ public class InsertOverwriteJobManager {
             return true;
         } catch (Exception e) {
             LOG.warn("deregister overwrite job failed", e);
-            return false;
+            throw e;
         } finally {
             lock.writeLock().unlock();
         }

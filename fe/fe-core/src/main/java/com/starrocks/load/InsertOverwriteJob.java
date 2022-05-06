@@ -238,14 +238,17 @@ public class InsertOverwriteJob implements Writable {
 
     // export transaction id
     private void executeInsert() {
+        LOG.info("start to execute insert");
         insertStmt.setOverwrite(false);
         try {
             StmtExecutor stmtExecutor = new StmtExecutor(context, insertStmt);
             stmtExecutor.execute();
+            LOG.info("execute insert finished");
             if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
                 // ((CreateTableAsSelectStmt) parsedStmt).dropTable(context);
                 // drop temp partitions
-                throw new RuntimeException("insert failed, job");
+                LOG.info("execute insert failed, jobId:{}", jobId);
+                throw new RuntimeException("insert failed");
             }
             // init loadFuture and add listener
         } catch (Throwable t) {
