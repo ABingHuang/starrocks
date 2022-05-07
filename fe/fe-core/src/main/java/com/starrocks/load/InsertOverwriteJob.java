@@ -5,6 +5,7 @@ package com.starrocks.load;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.InsertStmt;
+import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
@@ -402,7 +403,9 @@ public class InsertOverwriteJob implements Writable {
                         .map(partitionName -> targetTable.getPartition(partitionName, true).getId()).collect(Collectors.toList());
                 LOG.info("newPartitionIds:{}",
                         Strings.join(newPartitionIds.stream().map(id -> id.toString()).collect(Collectors.toList()), ","));
-                insertStmt.setTargetPartitionIds(newPartitionIds);
+                PartitionNames partitionNames = new PartitionNames(true, newPartitionNames);
+                insertStmt.setTargetPartitionNames(partitionNames);
+                // insertStmt.setTargetPartitionIds(newPartitionIds);
             } finally {
                 db.readUnlock();
             }

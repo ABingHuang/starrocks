@@ -93,7 +93,7 @@ public class InsertStmt extends DmlStmt {
     public static final String STREAMING = "STREAMING";
 
     private final TableName tblName;
-    private final PartitionNames targetPartitionNames;
+    private PartitionNames targetPartitionNames;
     // parsed from targetPartitionNames.
     // if targetPartitionNames is not set, add all formal partitions' id of the table into it
     private List<Long> targetPartitionIds = Lists.newArrayList();
@@ -893,6 +893,10 @@ public class InsertStmt extends DmlStmt {
 
     public List<String> getTargetColumnNames() {
         return targetColumnNames;
+    }
+
+    public void setTargetPartitionNames(PartitionNames targetPartitionNames) {
+        this.targetPartitionNames = targetPartitionNames;
     }
 
     public void setTargetPartitionIds(List<Long> targetPartitionIds) {
