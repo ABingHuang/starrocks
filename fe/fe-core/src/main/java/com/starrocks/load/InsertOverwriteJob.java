@@ -415,7 +415,13 @@ public class InsertOverwriteJob implements Writable {
         db.writeLock();
         try {
             // pay attention to log info
-            targetTable.replaceTempPartitions(sourcePartitionNames, newPartitionNames, true, false);
+            if (targetTable.getPartitionInfo().getType() == PartitionType.RANGE) {
+                targetTable.replaceTempPartitions(sourcePartitionNames, newPartitionNames, true, false);
+            } else {
+                LOG.info("replace source partition:{} with temp partition:{}",
+                        sourcePartitionNames.get(0), newPartitionNames.get(0));
+                targetTable.replacePartition(sourcePartitionNames.get(0), newPartitionNames.get(0));
+            }
         } catch (Exception e) {
             LOG.warn("replace partitions failed when insert overwrite into tableId:{}, tableName:{}",
                     targetTable.getId(), targetTable.getName(), e);
