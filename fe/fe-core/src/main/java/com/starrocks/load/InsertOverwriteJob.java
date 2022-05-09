@@ -392,6 +392,7 @@ public class InsertOverwriteJob implements Writable {
             LOG.warn("invalid job state:{} to finish", jobState);
             return;
         }
+        LOG.info("start to commit insert overwrite job:{}", jobId);
         // try 3 times, or failed
         for (int i = 0; i < 3; i++) {
             try {

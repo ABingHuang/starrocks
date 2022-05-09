@@ -54,9 +54,12 @@ public class InsertAnalyzer {
             PartitionNames targetPartitionNames = insertStmt.getTargetPartitionNames();
 
             if (targetPartitionNames != null) {
+                /*
                 if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
                     throw new SemanticException("PARTITION clause is not valid for INSERT into unpartitioned table");
                 }
+
+                 */
 
                 if (targetPartitionNames.getPartitionNames().isEmpty()) {
                     throw new SemanticException("No partition specified in partition lists");
