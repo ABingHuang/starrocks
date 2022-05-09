@@ -285,15 +285,15 @@ public class InsertOverwriteJob implements Writable {
             List<PartitionPersistInfo> partitionInfoList = Lists.newArrayListWithCapacity(newTempPartitions.size());
             for (int i = 0; i < newTempPartitions.size(); i++) {
                 targetTable.addTempPartition(newTempPartitions.get(i));
+                long sourcePartitionId = sourcePartitions.get(i).getId();
+                partitionInfo.addPartition(newTempPartitions.get(i).getId(),
+                        partitionInfo.getDataProperty(sourcePartitionId),
+                        partitionInfo.getReplicationNum(sourcePartitionId),
+                        partitionInfo.getIsInMemory(sourcePartitionId));
                 if (partitionInfo.getType() == PartitionType.RANGE) {
                     RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                    long sourcePartitionId = sourcePartitions.get(i).getId();
                     rangePartitionInfo.setRange(newTempPartitions.get(i).getId(), true,
                             rangePartitionInfo.getRange(sourcePartitionId));
-                    rangePartitionInfo.addPartition(newTempPartitions.get(i).getId(),
-                            rangePartitionInfo.getDataProperty(sourcePartitionId),
-                            rangePartitionInfo.getReplicationNum(sourcePartitionId),
-                            rangePartitionInfo.getIsInMemory(sourcePartitionId));
 
                     // contruct PartitionPersistInfo
                     Partition partition = newTempPartitions.get(i);

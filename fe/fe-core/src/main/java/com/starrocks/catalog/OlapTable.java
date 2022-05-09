@@ -1659,8 +1659,10 @@ public class OlapTable extends Table {
         if (srcPartition != null) {
             idToPartition.remove(srcPartition.getId());
             nameToPartition.remove(sourcePartitionName);
+            partitionInfo.dropPartition(srcPartition.getId());
             Catalog.getCurrentCatalog().onErasePartition(srcPartition);
         }
+
         Partition partition = tempPartitions.getPartition(tempPartitionName);
         // add
         addPartition(partition);
