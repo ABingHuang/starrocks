@@ -44,6 +44,7 @@ import java.util.stream.Collectors;
 // 可取消
 // failover
 // failover依赖于partition，依赖于事务的replay
+// 是否需要实现write和read接口？
 public class InsertOverwriteJob implements Writable {
     private static final Logger LOG = LogManager.getLogger(InsertOverwriteJob.class);
 

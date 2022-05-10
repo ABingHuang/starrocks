@@ -16,6 +16,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+// 是否需要持久化？
 public class InsertOverwriteJobManager {
     private static final Logger LOG = LogManager.getLogger(InsertOverwriteJobManager.class);
 

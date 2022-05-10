@@ -805,11 +805,13 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_CREATE_INSERT_OVERWRITE: {
+                    Thread.sleep(10000);
                     CreateInsertOverwriteJobInfo jobInfo = (CreateInsertOverwriteJobInfo) journal.getData();
                     catalog.getInsertOverwriteJobManager().replayCreateInsertOverwrite(jobInfo);
                     break;
                 }
                 case OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE: {
+                    Thread.sleep(10000);
                     InsertOverwriteStateChangeInfo stateChangeInfo = (InsertOverwriteStateChangeInfo) journal.getData();
                     catalog.getInsertOverwriteJobManager().replayInsertOverwriteStateChange(stateChangeInfo);
                     break;
