@@ -187,19 +187,19 @@ public class InsertOverwriteJobManager {
     }
 
     public void reSubmitRunningJobs() {
-        // wait until serving catalog is ready
-        while (!Catalog.getServingCatalog().isReady()) {
-            try {
-                // not return, but sleep a while. to avoid some thread with large running interval will
-                // wait for a long time to start again.
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                LOG.warn("InsertOverwriteJobManager runAfterCatalogReady interrupted exception.", e);
-            }
-        }
         // resubmit running insert overwrite jobs
         if (!Catalog.isCheckpointThread()) {
             reSubmitExecutorService.submit(() -> {
+                // wait until serving catalog is ready
+                while (!Catalog.getServingCatalog().isReady()) {
+                    try {
+                        // not return, but sleep a while. to avoid some thread with large running interval will
+                        // wait for a long time to start again.
+                        Thread.sleep(1000);
+                    } catch (InterruptedException e) {
+                        LOG.warn("InsertOverwriteJobManager runAfterCatalogReady interrupted exception.", e);
+                    }
+                }
                 LOG.info("start to resubmit running jobs, size:{}", runningJobs.size());
                 for (InsertOverwriteJob job : runningJobs) {
                     LOG.info("start to resubmit insert overwrite job:{}", job.getJobId());
