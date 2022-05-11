@@ -1580,6 +1580,8 @@ public class Catalog {
             checksum = loadAnalyze(dis, checksum);
             remoteChecksum = dis.readLong();
             checksum = loadWorkGroups(dis, checksum);
+            remoteChecksum = dis.readLong();
+            checksum = loadInsertOverwriteJobs(dis, checksum);
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1917,6 +1919,16 @@ public class Catalog {
         return checksum;
     }
 
+    public long loadInsertOverwriteJobs(DataInputStream dis, long checksum) throws IOException {
+        try {
+            this.insertOverwriteJobManager = InsertOverwriteJobManager.read(dis);
+            LOG.info("finished replaying InsertOverwriteJobManager from image");
+        } catch (EOFException e) {
+            LOG.warn("no InsertOverwriteJobManager to replay.", e);
+        }
+        return checksum;
+    }
+
     public long saveDeleteHandler(DataOutputStream dos, long checksum) throws IOException {
         getDeleteHandler().write(dos);
         return checksum;
@@ -1924,6 +1936,11 @@ public class Catalog {
 
     public long saveWorkGroups(DataOutputStream dos, long checksum) throws IOException {
         getWorkGroupMgr().write(dos);
+        return checksum;
+    }
+
+    public long saveInsertOverwriteJobs(DataOutputStream dos, long checksum) throws IOException {
+        getInsertOverwriteJobManager().write(dos);
         return checksum;
     }
 
@@ -2058,6 +2075,8 @@ public class Catalog {
             checksum = saveAnalyze(dos, checksum);
             dos.writeLong(checksum);
             checksum = saveWorkGroups(dos, checksum);
+            dos.writeLong(checksum);
+            checksum = saveInsertOverwriteJobs(dos, checksum);
         }
 
         long saveImageEndTime = System.currentTimeMillis();

@@ -96,6 +96,7 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -1027,8 +1028,9 @@ public class StmtExecutor {
             InsertOverwriteJob insertOverwriteJob =
                     new InsertOverwriteJob(context, Catalog.getCurrentCatalog().getNextId(), (InsertStmt) stmt);
             // add edit log
+            String insertStmtSql = AST2SQL.toString(stmt);
             CreateInsertOverwriteJobInfo info = new CreateInsertOverwriteJobInfo(insertOverwriteJob.getJobId(),
-                    insertOverwriteJob.getTargetDbId(), insertOverwriteJob.getTargetTableId(), stmt.getOrigStmt().originStmt);
+                    insertOverwriteJob.getTargetDbId(), insertOverwriteJob.getTargetTableId(), insertStmtSql);
             LOG.info("create insert overwrite job info:{}", info);
             Catalog.getCurrentCatalog().getEditLog().logCreateInsertOverwrite(info);
             InsertOverwriteJobManager manager = Catalog.getCurrentCatalog().getInsertOverwriteJobManager();

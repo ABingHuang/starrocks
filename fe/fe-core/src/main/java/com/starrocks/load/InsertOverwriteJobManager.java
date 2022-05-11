@@ -4,14 +4,22 @@ package com.starrocks.load;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
 import com.starrocks.persist.CreateInsertOverwriteJobInfo;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonUtils;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import jersey.repackaged.com.google.common.collect.Sets;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -20,13 +28,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-// 是否需要持久化？
-public class InsertOverwriteJobManager {
+public class InsertOverwriteJobManager implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(InsertOverwriteJobManager.class);
 
+    @SerializedName(value = "overwriteJobMap")
     private Map<Long, InsertOverwriteJob> overwriteJobMap;
 
     // tableId -> partitionId list
+    @SerializedName(value = "partitionsWithOverwrite")
     private Map<Long, Set<Long>> partitionsWithOverwrite;
 
     private ExecutorService reSubmitExecutorService;
@@ -171,6 +180,9 @@ public class InsertOverwriteJobManager {
                 LOG.warn("register insert overwrite job failed. jobId:{}", insertOverwriteJob.getJobId());
                 return;
             }
+            if (runningJobs == null) {
+                runningJobs = Lists.newArrayList();
+            }
             runningJobs.add(insertOverwriteJob);
         } catch (Exception e) {
             LOG.warn("replay insert overwrite job failed. jobId:{}", jobInfo.getJobId(), e);
@@ -181,8 +193,11 @@ public class InsertOverwriteJobManager {
         InsertOverwriteJob job = getOverwriteJob(info.getJobId());
         job.replayStateChange(info);
         if (job.isFinished()) {
+            LOG.info("insert overwrite job is finished. deregister it and remove from runningJobs");
             deregisterOverwriteJob(job.getJobId());
-            runningJobs.remove(job);
+            if (runningJobs != null) {
+                runningJobs.remove(job);
+            }
         }
     }
 
@@ -201,12 +216,46 @@ public class InsertOverwriteJobManager {
                     }
                 }
                 LOG.info("start to resubmit running jobs, size:{}", runningJobs.size());
-                for (InsertOverwriteJob job : runningJobs) {
-                    LOG.info("start to resubmit insert overwrite job:{}", job.getJobId());
-                    submitJob(job);
+                if (runningJobs != null) {
+                    for (InsertOverwriteJob job : runningJobs) {
+                        LOG.info("start to resubmit insert overwrite job:{}", job.getJobId());
+                        submitJob(job);
+                    }
+                    runningJobs = null;
                 }
-                runningJobs = null;
             });
+        }
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
+    }
+
+    public static InsertOverwriteJobManager read(DataInput in) throws IOException {
+        // read other fields in gson
+        String json = Text.readString(in);
+        InsertOverwriteJobManager jobManager = GsonUtils.GSON.fromJson(json, InsertOverwriteJobManager.class);
+
+        // In the present, the fullSchema could be rebuilt by schema change while the properties is changed by MV.
+        // After that, some properties of fullSchema and nameToColumn may be not same as properties of base columns.
+        // So, here we need to rebuild the fullSchema to ensure the correctness of the properties.
+        return jobManager;
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        if (!Catalog.isCheckpointThread()) {
+            if (runningJobs == null) {
+                runningJobs = Lists.newArrayList();
+            }
+            for (InsertOverwriteJob job : overwriteJobMap.values()) {
+                if (!job.isFinished()) {
+                    LOG.info("add insert overwrite job:{} to runningJobs, state:{}",
+                            job.getJobId(), job.getJobState());
+                    runningJobs.add(job);
+                }
+            }
         }
     }
 }

@@ -23,6 +23,7 @@ import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
+import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
@@ -667,6 +668,19 @@ public class AST2SQL {
             } else {
                 return "(" + visit(node) + ")";
             }
+        }
+
+        @Override
+        public String visitInsertStatement(InsertStmt insertStmt, Void context) {
+            StringBuilder strBuilder = new StringBuilder();
+            strBuilder.append("INSERT");
+            if (insertStmt.isOverwrite()) {
+                strBuilder.append(" OVERWRITE ");
+            } else {
+                strBuilder.append(" INTO ");
+            }
+            strBuilder.append(visitQueryStatement(insertStmt.getQueryStatement(), context));
+            return strBuilder.toString();
         }
     }
 }

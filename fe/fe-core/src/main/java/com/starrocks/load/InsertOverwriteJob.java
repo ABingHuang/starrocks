@@ -2,6 +2,7 @@
 
 package com.starrocks.load;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
@@ -20,6 +21,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.AddPartitionsInfo;
+import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -27,6 +29,8 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.analyzer.InsertAnalyzer;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
@@ -40,21 +44,12 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
-// 持久化
-// 可重入
-// 可取消
-// failover
-// failover依赖于partition，依赖于事务的replay
-// 是否需要实现write和read接口？
 public class InsertOverwriteJob implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(InsertOverwriteJob.class);
 
     @SerializedName(value = "jobId")
     private long jobId;
-    // can get from insertStmt
-    private OlapTable targetTable;
 
-    // TODO: fixme
     @SerializedName(value = "insertOverwriteSql")
     private String insertOverwriteSql;
 
@@ -77,6 +72,7 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
     @SerializedName(value = "newPartitionNames")
     List<String> newPartitionNames;
 
+    private OlapTable targetTable;
     Database db;
     // isOverwrite is false, changed to insert into
     private InsertStmt insertStmt;
@@ -100,19 +96,19 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
         this.db = Catalog.getCurrentCatalog().getDb(dbId);
         this.targetTable = (OlapTable) db.getTable(tableId);
 
-        // TODO: optimize this
-        List<StatementBase> stmts;
         try {
-            stmts = com.starrocks.sql.parser.SqlParser.parse(originInsertSql, context.getSessionVariable().getSqlMode());
-        } catch (ParsingException parsingException) {
-            LOG.warn("parse sql error. originInsertSql:{}", originInsertSql, parsingException);
-            throw new AnalysisException(parsingException.getMessage());
+            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(
+                    originInsertSql, context.getSessionVariable().getSqlMode());
+            this.insertStmt = (InsertStmt) stmts.get(0);
+            InsertAnalyzer.analyze(insertStmt, context);
+        } catch (Exception exception) {
+            LOG.warn("parse sql error. originInsertSql:{}", originInsertSql, exception);
         }
-        this.insertStmt = (InsertStmt) stmts.get(0);
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
+        insertOverwriteSql = AST2SQL.toString(insertStmt);
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
     }
@@ -162,7 +158,22 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
-
+        // parse insertOverwriteSql back to InsertStmt
+        LOG.info("parse insertOverwriteSql back to InsertStmt");
+        this.context = new ConnectContext();
+        try {
+            List<StatementBase> stmts =
+                    com.starrocks.sql.parser.SqlParser.parse(insertOverwriteSql,
+                            context.getSessionVariable().getSqlMode());
+            Preconditions.checkState(stmts.size() == 1);
+            insertStmt = (InsertStmt) stmts.get(0);
+            // should analyze insertStmt
+            InsertAnalyzer.analyze(insertStmt, context);
+            this.db = Catalog.getCurrentCatalog().getDb(insertStmt.getDb());
+            this.targetTable = (OlapTable) insertStmt.getTargetTable();
+        } catch (Exception e) {
+            LOG.warn("invalid insertOverwriteSql:{}", insertOverwriteSql, e);
+        }
     }
 
     public OverwriteJobState run() {
@@ -349,7 +360,11 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
             // pay attention to failover and edit log info
             if (newPartitionNames != null) {
                 for (String partitionName : newPartitionNames) {
+                    LOG.info("drop partition:{}, id:{}", partitionName, targetTable.getPartition(partitionName, true).getId());
                     targetTable.dropTempPartition(partitionName, true);
+                    DropPartitionInfo info = new DropPartitionInfo(db.getId(), targetTable.getId(),
+                            partitionName, true, true);
+                    Catalog.getCurrentCatalog().getEditLog().logDropPartition(info);
                 }
             }
         } finally {
@@ -381,10 +396,8 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
     }
 
     private boolean doCommit() {
-        // swap
         db.writeLock();
         try {
-            // pay attention to log info
             if (targetTable.getPartitionInfo().getType() == PartitionType.RANGE) {
                 targetTable.replaceTempPartitions(sourcePartitionNames, newPartitionNames, true, false);
             } else {
