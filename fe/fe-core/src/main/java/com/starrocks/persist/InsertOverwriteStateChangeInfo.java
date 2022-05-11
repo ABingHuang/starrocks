@@ -2,6 +2,7 @@
 
 package com.starrocks.persist;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.load.InsertOverwriteJob;
@@ -13,10 +14,13 @@ import java.io.IOException;
 import java.util.List;
 
 public class InsertOverwriteStateChangeInfo implements Writable {
-
+    @SerializedName(value = "jobId")
     private long jobId;
+    @SerializedName(value = "fromState")
     private InsertOverwriteJob.OverwriteJobState fromState;
+    @SerializedName(value = "toState")
     private InsertOverwriteJob.OverwriteJobState toState;
+    @SerializedName(value = "newPartitionsName")
     private List<String> newPartitionsName;
 
     public InsertOverwriteStateChangeInfo(long jobId, InsertOverwriteJob.OverwriteJobState fromState,
