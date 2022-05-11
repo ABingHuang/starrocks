@@ -173,7 +173,7 @@ public class InsertOverwriteJobManager {
             InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(jobInfo.getJobId(),
                     jobInfo.getDbId(), jobInfo.getTableId(), jobInfo.getOriginInsertSql());
             boolean registered = registerOverwriteJob(insertOverwriteJob);
-            if (registered) {
+            if (!registered) {
                 LOG.warn("register insert overwrite job failed. jobId:{}", insertOverwriteJob.getJobId());
             }
         } catch (Exception e) {
