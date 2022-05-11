@@ -20,15 +20,19 @@ public class InsertOverwriteStateChangeInfo implements Writable {
     private InsertOverwriteJob.OverwriteJobState fromState;
     @SerializedName(value = "toState")
     private InsertOverwriteJob.OverwriteJobState toState;
-    @SerializedName(value = "newPartitionsName")
-    private List<String> newPartitionsName;
+    @SerializedName(value = "sourcePartitionName")
+    private List<String> sourcePartitionNames;
+    @SerializedName(value = "newPartitionNames")
+    private List<String> newPartitionNames;
 
     public InsertOverwriteStateChangeInfo(long jobId, InsertOverwriteJob.OverwriteJobState fromState,
-                                          InsertOverwriteJob.OverwriteJobState toState, List<String> newPartitionsName) {
+                                          InsertOverwriteJob.OverwriteJobState toState,
+                                          List<String> sourcePartitionNames, List<String> newPartitionNames) {
         this.jobId = jobId;
         this.fromState = fromState;
         this.toState = toState;
-        this.newPartitionsName = newPartitionsName;
+        this.sourcePartitionNames = sourcePartitionNames;
+        this.newPartitionNames = newPartitionNames;
     }
 
     public long getJobId() {
@@ -55,12 +59,16 @@ public class InsertOverwriteStateChangeInfo implements Writable {
         this.toState = toState;
     }
 
+    public List<String> getSourcePartitionNames() {
+        return sourcePartitionNames;
+    }
+
     public List<String> getNewPartitionsName() {
-        return newPartitionsName;
+        return newPartitionNames;
     }
 
     public void setNewPartitionsName(List<String> newPartitionsName) {
-        this.newPartitionsName = newPartitionsName;
+        this.newPartitionNames = newPartitionsName;
     }
 
     @Override
@@ -69,7 +77,7 @@ public class InsertOverwriteStateChangeInfo implements Writable {
                 "jobId=" + jobId +
                 ", fromState=" + fromState +
                 ", toState=" + toState +
-                ", newPartitionsName=" + newPartitionsName +
+                ", newPartitionNames=" + newPartitionNames +
                 '}';
     }
 

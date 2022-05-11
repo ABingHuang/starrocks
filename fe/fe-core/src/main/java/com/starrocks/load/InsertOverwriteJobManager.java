@@ -185,4 +185,8 @@ public class InsertOverwriteJobManager {
         InsertOverwriteJob job = getOverwriteJob(info.getJobId());
         job.replayStateChange(info);
     }
+
+    public void runAfterCatalogReady() {
+
+    }
 }

@@ -169,6 +169,7 @@ public class InsertOverwriteJob implements Writable {
         // state can not be PENDING here
         switch (info.getToState()) {
             case PREPARED:
+                sourcePartitionNames = info.getSourcePartitionNames();
                 newPartitionNames = info.getNewPartitionsName();
                 jobState.set(OverwriteJobState.PREPARED);
                 break;
@@ -225,7 +226,7 @@ public class InsertOverwriteJob implements Writable {
 
     private void transferTo(OverwriteJobState state) {
         InsertOverwriteStateChangeInfo info =
-                new InsertOverwriteStateChangeInfo(jobId, jobState.get(), state, newPartitionNames);
+                new InsertOverwriteStateChangeInfo(jobId, jobState.get(), state, sourcePartitionNames, newPartitionNames);
         Catalog.getCurrentCatalog().getEditLog().logInsertOverwriteStateChange(info);
         jobState.set(state);
         handle();
