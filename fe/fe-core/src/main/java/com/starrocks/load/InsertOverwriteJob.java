@@ -184,14 +184,18 @@ public class InsertOverwriteJob implements Writable {
                 break;
             case FAILED:
                 jobState.set(OverwriteJobState.FAILED);
+                LOG.info("replay insert overwrite job:{} to FAILED", jobId);
                 gc();
                 break;
             case CANCELLED:
                 jobState.set(OverwriteJobState.CANCELLED);
+                LOG.info("replay insert overwrite job:{} to CANCELLED", jobId);
                 gc();
                 break;
             case SUCCESS:
-                LOG.info("replay insert overwrite job:{} succeed", jobId);
+                jobState.set(OverwriteJobState.SUCCESS);
+                LOG.info("replay insert overwrite job:{} to SUCCESS", jobId);
+                break;
             default:
                 LOG.warn("invalid state:{} for insert overwrite job:{}", jobState, jobId);
         }
