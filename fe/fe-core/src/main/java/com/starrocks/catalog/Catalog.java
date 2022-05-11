@@ -3552,9 +3552,14 @@ public class Catalog {
                 olapTable.addPartition(partition);
             }
 
-            ((RangePartitionInfo) partitionInfo).unprotectHandleNewSinglePartitionDesc(partition.getId(),
-                    info.isTempPartition(), info.getRange(), info.getDataProperty(), info.getReplicationNum(),
-                    info.isInMemory());
+            if (partitionInfo.getType() == PartitionType.RANGE) {
+                ((RangePartitionInfo) partitionInfo).unprotectHandleNewSinglePartitionDesc(partition.getId(),
+                        info.isTempPartition(), info.getRange(), info.getDataProperty(), info.getReplicationNum(),
+                        info.isInMemory());
+            } else {
+                partitionInfo.addPartition(
+                        partition.getId(), info.getDataProperty(), info.getReplicationNum(), info.isInMemory());
+            }
 
             if (!isCheckpointThread()) {
                 // add to inverted index
@@ -6945,6 +6950,7 @@ public class Catalog {
                 Partition newPartition =
                         createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
                 newPartitions.add(newPartition);
+                LOG.info("add newPartitionId:{}", newPartitionId);
             }
             buildPartitions(db, copiedTbl, newPartitions);
         } catch (Exception e) {

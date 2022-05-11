@@ -1316,6 +1316,7 @@ public class DatabaseTransactionMgr {
             OlapTable table = (OlapTable) db.getTable(tableId);
             for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
                 long partitionId = partitionCommitInfo.getPartitionId();
+                LOG.info("commit txn for partitionId:" + partitionId);
                 Partition partition = table.getPartition(partitionId);
                 if (!partition.isUseStarOS()) {
                     List<MaterializedIndex> allIndices =
