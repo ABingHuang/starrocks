@@ -22,6 +22,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.PartitionPersistInfo;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -35,9 +36,7 @@ import org.apache.parquet.Strings;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -47,19 +46,20 @@ import java.util.stream.Collectors;
 // failover
 // failover依赖于partition，依赖于事务的replay
 // 是否需要实现write和read接口？
-public class InsertOverwriteJob implements Writable {
+public class InsertOverwriteJob implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(InsertOverwriteJob.class);
 
     @SerializedName(value = "jobId")
     private long jobId;
-    // isOverwrite is false, changed to insert into
-    private InsertStmt insertStmt;
-    private ConnectContext context;
     // can get from insertStmt
-    @SerializedName(value = "targetTable")
     private OlapTable targetTable;
 
-    // private List<Partition> targetPartitions;
+    // TODO: fixme
+    @SerializedName(value = "insertOverwriteSql")
+    private String insertOverwriteSql;
+
+    @SerializedName(value = "jobState")
+    private AtomicReference<OverwriteJobState> jobState;
 
     public enum OverwriteJobState {
         PENDING,
@@ -71,13 +71,16 @@ public class InsertOverwriteJob implements Writable {
         CANCELLED
     }
 
-    private AtomicReference<OverwriteJobState> jobState;
-
+    @SerializedName(value = "sourcePartitionNames")
     List<String> sourcePartitionNames;
+
+    @SerializedName(value = "newPartitionNames")
     List<String> newPartitionNames;
+
     Database db;
-    private ExecutorService loadExecutorService;
-    private Future<Void> loadFuture;
+    // isOverwrite is false, changed to insert into
+    private InsertStmt insertStmt;
+    private ConnectContext context;
 
     public InsertOverwriteJob(ConnectContext context, long jobId, InsertStmt insertStmt) {
         this.context = context;
@@ -86,7 +89,6 @@ public class InsertOverwriteJob implements Writable {
         this.insertStmt = insertStmt;
         this.targetTable = (OlapTable) insertStmt.getTargetTable();
         this.db = Catalog.getCurrentCatalog().getDb(insertStmt.getDb());
-        this.loadExecutorService = Executors.newCachedThreadPool();
     }
 
     // used to replay InsertOverwriteJob
@@ -139,6 +141,16 @@ public class InsertOverwriteJob implements Writable {
         return insertStmt.getTargetPartitionIds();
     }
 
+    public OverwriteJobState getJobState() {
+        return jobState.get();
+    }
+
+    public boolean isFinished() {
+        return jobState.get() == OverwriteJobState.SUCCESS
+                || jobState.get() == OverwriteJobState.FAILED
+                || jobState.get() == OverwriteJobState.CANCELLED;
+    }
+
     public boolean cancel() {
         try {
             transferTo(OverwriteJobState.CANCELLED);
@@ -146,6 +158,11 @@ public class InsertOverwriteJob implements Writable {
             return false;
         }
         return true;
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+
     }
 
     public OverwriteJobState run() {
@@ -210,7 +227,6 @@ public class InsertOverwriteJob implements Writable {
                 startLoad();
                 break;
             case LOADING:
-                // waitLoad();
                 executeInsert();
                 break;
             case COMMITTING:
@@ -320,43 +336,6 @@ public class InsertOverwriteJob implements Writable {
             AddPartitionsInfo infos = new AddPartitionsInfo(partitionInfoList);
             LOG.info("add AddPartitionsInfo log");
             Catalog.getCurrentCatalog().getEditLog().logAddPartitions(infos);
-
-
-            /*
-            if (partitionInfo.getType() == PartitionType.RANGE) {
-                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                for (int i = 0; i < newTempPartitions.size(); i++) {
-                    targetTable.addTempPartition(newTempPartitions.get(i));
-
-                    long sourcePartitionId = sourcePartitions.get(i).getId();
-                    rangePartitionInfo.setRange(newTempPartitions.get(i).getId(), true,
-                            rangePartitionInfo.getRange(sourcePartitionId));
-                    rangePartitionInfo.addPartition(newTempPartitions.get(i).getId(),
-                            rangePartitionInfo.getDataProperty(sourcePartitionId),
-                            rangePartitionInfo.getReplicationNum(sourcePartitionId),
-                            rangePartitionInfo.getIsInMemory(sourcePartitionId));
-                }
-                List<PartitionPersistInfo> partitionInfoList = Lists.newArrayListWithCapacity(newTempPartitions.size());
-                for (int i = 0; i < newTempPartitions.size(); i++) {
-                    Partition partition = newTempPartitions.get(i);
-                    PartitionPersistInfo info =
-                            new PartitionPersistInfo(db.getId(), targetTable.getId(), partition,
-                                    rangePartitionInfo.getRange(partition.getId()),
-                                    rangePartitionInfo.getDataProperty(partition.getId()),
-                                    rangePartitionInfo.getReplicationNum(partition.getId()),
-                                    rangePartitionInfo.getIsInMemory(partition.getId()),
-                                    true);
-                    partitionInfoList.add(info);
-                }
-
-                AddPartitionsInfo infos = new AddPartitionsInfo(partitionInfoList);
-                Catalog.getCurrentCatalog().getEditLog().logAddPartitions(infos);
-            } else {
-                throw new RuntimeException("do not support unpartitioned type table");
-            }
-
-             */
-
             LOG.info("create temp partition finished");
         } finally {
             db.writeUnlock();
@@ -365,12 +344,6 @@ public class InsertOverwriteJob implements Writable {
 
     private void gc() {
         LOG.info("start to garbage collect");
-        if (loadFuture != null) {
-            boolean ret = loadFuture.cancel(true);
-            if (!ret) {
-                LOG.warn("cancel load thread failed");
-            }
-        }
         db.writeLock();
         try {
             // pay attention to failover and edit log info
@@ -381,16 +354,6 @@ public class InsertOverwriteJob implements Writable {
             }
         } finally {
             db.writeUnlock();
-        }
-    }
-
-    private void waitLoad() {
-        try {
-            loadFuture.get();
-            transferTo(OverwriteJobState.COMMITTING);
-        } catch (Exception e) {
-            LOG.warn("insert overwrite job:{} load failed", jobId, e);
-            transferTo(OverwriteJobState.FAILED);
         }
     }
 
@@ -455,22 +418,28 @@ public class InsertOverwriteJob implements Writable {
                         Strings.join(newPartitionIds.stream().map(id -> id.toString()).collect(Collectors.toList()), ","));
                 PartitionNames partitionNames = new PartitionNames(true, newPartitionNames);
                 insertStmt.setTargetPartitionNames(partitionNames);
-                // insertStmt.setTargetPartitionIds(newPartitionIds);
+                insertStmt.setTargetPartitionIds(newPartitionIds);
             } finally {
                 db.readUnlock();
             }
 
-            // execute insert stmt
-            /*
-            loadFuture = CompletableFuture.runAsync(() -> {
-                executeInsert();
-            }, loadExecutorService);
-
-             */
             transferTo(OverwriteJobState.LOADING);
         } catch (Exception e) {
             LOG.warn("insert overwrite job:{} failed in loading.", jobId, e);
             transferTo(OverwriteJobState.FAILED);
         }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        InsertOverwriteJob that = (InsertOverwriteJob) o;
+        return jobId == that.jobId;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(jobId);
     }
 }

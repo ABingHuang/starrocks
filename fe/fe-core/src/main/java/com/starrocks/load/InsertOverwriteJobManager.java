@@ -2,9 +2,12 @@
 
 package com.starrocks.load;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.persist.CreateInsertOverwriteJobInfo;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
+import io.netty.util.concurrent.DefaultThreadFactory;
 import jersey.repackaged.com.google.common.collect.Sets;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -14,6 +17,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 // 是否需要持久化？
@@ -25,7 +29,9 @@ public class InsertOverwriteJobManager {
     // tableId -> partitionId list
     private Map<Long, Set<Long>> partitionsWithOverwrite;
 
-    private ExecutorService overwriteJobExecutorService;
+    private ExecutorService reSubmitExecutorService;
+
+    private List<InsertOverwriteJob> runningJobs;
 
     private ReentrantReadWriteLock lock;
 
@@ -33,7 +39,9 @@ public class InsertOverwriteJobManager {
         this.overwriteJobMap = Maps.newHashMap();
         this.partitionsWithOverwrite = Maps.newHashMap();
         // TODO: add named and limited thread pool
-        this.overwriteJobExecutorService = Executors.newCachedThreadPool();
+        ThreadFactory threadFactory = new DefaultThreadFactory("resubmit-thread");
+        this.reSubmitExecutorService = Executors.newSingleThreadExecutor(threadFactory);
+        this.runningJobs = Lists.newArrayList();
         this.lock = new ReentrantReadWriteLock();
     }
 
@@ -47,20 +55,6 @@ public class InsertOverwriteJobManager {
     }
 
     public boolean submitJob(InsertOverwriteJob job) {
-        /*
-        CompletableFuture<Boolean> future = CompletableFuture.supplyAsync(() -> {
-            try {
-                registerOverwriteJob(job);
-                InsertOverwriteJob.OverwriteJobState state = job.run();
-                return state == InsertOverwriteJob.OverwriteJobState.SUCCESS;
-            } finally {
-                deregisterOverwriteJob(job.getJobId());
-            }
-
-        }, overwriteJobExecutorService);
-        return future;
-
-         */
         try {
             registerOverwriteJob(job);
             InsertOverwriteJob.OverwriteJobState state = job.run();
@@ -175,7 +169,9 @@ public class InsertOverwriteJobManager {
             boolean registered = registerOverwriteJob(insertOverwriteJob);
             if (!registered) {
                 LOG.warn("register insert overwrite job failed. jobId:{}", insertOverwriteJob.getJobId());
+                return;
             }
+            runningJobs.add(insertOverwriteJob);
         } catch (Exception e) {
             LOG.warn("replay insert overwrite job failed. jobId:{}", jobInfo.getJobId(), e);
         }
@@ -184,9 +180,33 @@ public class InsertOverwriteJobManager {
     public void replayInsertOverwriteStateChange(InsertOverwriteStateChangeInfo info) {
         InsertOverwriteJob job = getOverwriteJob(info.getJobId());
         job.replayStateChange(info);
+        if (job.isFinished()) {
+            deregisterOverwriteJob(job.getJobId());
+            runningJobs.remove(job);
+        }
     }
 
-    public void runAfterCatalogReady() {
-
+    public void reSubmitRunningJobs() {
+        // wait until serving catalog is ready
+        while (!Catalog.getServingCatalog().isReady()) {
+            try {
+                // not return, but sleep a while. to avoid some thread with large running interval will
+                // wait for a long time to start again.
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                LOG.warn("InsertOverwriteJobManager runAfterCatalogReady interrupted exception.", e);
+            }
+        }
+        // resubmit running insert overwrite jobs
+        if (!Catalog.isCheckpointThread()) {
+            reSubmitExecutorService.submit(() -> {
+                LOG.info("start to resubmit running jobs, size:{}", runningJobs.size());
+                for (InsertOverwriteJob job : runningJobs) {
+                    LOG.info("start to resubmit insert overwrite job:{}", job.getJobId());
+                    submitJob(job);
+                }
+                runningJobs = null;
+            });
+        }
     }
 }
