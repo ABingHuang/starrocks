@@ -3,6 +3,7 @@
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.PartitionNames;
@@ -12,6 +13,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
@@ -291,25 +293,24 @@ public class InsertOverwriteJob implements Writable {
                         partitionInfo.getDataProperty(sourcePartitionId),
                         partitionInfo.getReplicationNum(sourcePartitionId),
                         partitionInfo.getIsInMemory(sourcePartitionId));
+                Partition partition = newTempPartitions.get(i);
+                // range is null for UNPARTITIONED type
+                Range<PartitionKey> range = null;
                 if (partitionInfo.getType() == PartitionType.RANGE) {
                     RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                    rangePartitionInfo.setRange(newTempPartitions.get(i).getId(), true,
+                    rangePartitionInfo.setRange(partition.getId(), true,
                             rangePartitionInfo.getRange(sourcePartitionId));
-
-                    // contruct PartitionPersistInfo
-                    Partition partition = newTempPartitions.get(i);
-                    PartitionPersistInfo info =
-                            new PartitionPersistInfo(db.getId(), targetTable.getId(), partition,
-                                    rangePartitionInfo.getRange(partition.getId()),
-                                    rangePartitionInfo.getDataProperty(partition.getId()),
-                                    rangePartitionInfo.getReplicationNum(partition.getId()),
-                                    rangePartitionInfo.getIsInMemory(partition.getId()),
-                                    true);
-                    partitionInfoList.add(info);
-                } else {
-                    // UNPARTITIONED
-                    // TODO: add persistence info for this type
+                    range = rangePartitionInfo.getRange(partition.getId());
                 }
+                // contruct PartitionPersistInfo
+                PartitionPersistInfo info =
+                        new PartitionPersistInfo(db.getId(), targetTable.getId(), partition,
+                                range,
+                                partitionInfo.getDataProperty(partition.getId()),
+                                partitionInfo.getReplicationNum(partition.getId()),
+                                partitionInfo.getIsInMemory(partition.getId()),
+                                true);
+                partitionInfoList.add(info);
             }
             if (partitionInfo.getType() == PartitionType.RANGE) {
                 AddPartitionsInfo infos = new AddPartitionsInfo(partitionInfoList);
