@@ -312,10 +312,10 @@ public class InsertOverwriteJob implements Writable {
                                 true);
                 partitionInfoList.add(info);
             }
-            if (partitionInfo.getType() == PartitionType.RANGE) {
-                AddPartitionsInfo infos = new AddPartitionsInfo(partitionInfoList);
-                Catalog.getCurrentCatalog().getEditLog().logAddPartitions(infos);
-            }
+            AddPartitionsInfo infos = new AddPartitionsInfo(partitionInfoList);
+            LOG.info("add AddPartitionsInfo log");
+            Catalog.getCurrentCatalog().getEditLog().logAddPartitions(infos);
+
 
             /*
             if (partitionInfo.getType() == PartitionType.RANGE) {

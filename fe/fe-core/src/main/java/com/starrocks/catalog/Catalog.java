@@ -3542,6 +3542,8 @@ public class Catalog {
         Database db = this.getDb(info.getDbId());
         db.writeLock();
         try {
+            LOG.info("add partition:{}, tableId:{}, dbId:{}",
+                    info.getPartition().getId(), info.getTableId(), info.getDbId());
             OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
             Partition partition = info.getPartition();
 
@@ -3553,10 +3555,12 @@ public class Catalog {
             }
 
             if (partitionInfo.getType() == PartitionType.RANGE) {
+                LOG.info("add partition info for range type");
                 ((RangePartitionInfo) partitionInfo).unprotectHandleNewSinglePartitionDesc(partition.getId(),
                         info.isTempPartition(), info.getRange(), info.getDataProperty(), info.getReplicationNum(),
                         info.isInMemory());
             } else {
+                LOG.info("add partition info for single type");
                 partitionInfo.addPartition(
                         partition.getId(), info.getDataProperty(), info.getReplicationNum(), info.isInMemory());
             }
