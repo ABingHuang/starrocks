@@ -17,7 +17,6 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.AddPartitionsInfo;
@@ -31,7 +30,6 @@ import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.InsertAnalyzer;
-import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -88,7 +86,7 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
     }
 
     // used to replay InsertOverwriteJob
-    public InsertOverwriteJob(long jobId, long dbId, long tableId, String originInsertSql) throws AnalysisException {
+    public InsertOverwriteJob(long jobId, long dbId, long tableId, String originInsertSql) {
         this.context = new ConnectContext();
         context.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         this.jobId = jobId;
@@ -103,6 +101,7 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
             InsertAnalyzer.analyze(insertStmt, context);
         } catch (Exception exception) {
             LOG.warn("parse sql error. originInsertSql:{}", originInsertSql, exception);
+            throw exception;
         }
     }
 
@@ -167,7 +166,6 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
                             context.getSessionVariable().getSqlMode());
             Preconditions.checkState(stmts.size() == 1);
             insertStmt = (InsertStmt) stmts.get(0);
-            // should analyze insertStmt
             InsertAnalyzer.analyze(insertStmt, context);
             this.db = Catalog.getCurrentCatalog().getDb(insertStmt.getDb());
             this.targetTable = (OlapTable) insertStmt.getTargetTable();
