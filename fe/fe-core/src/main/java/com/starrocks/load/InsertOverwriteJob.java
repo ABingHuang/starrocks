@@ -277,11 +277,11 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
     }
 
     private void prepare() {
-        if (jobState.get() != OverwriteJobState.PENDING) {
-            LOG.warn("invalid job state:{} to prepare", jobState);
-            return;
-        }
+        Preconditions.checkState(jobState.get() == OverwriteJobState.PENDING);
         try {
+            LOG.info("start to sleep in prepare");
+            Thread.sleep(20000);
+            LOG.info("finish sleep in prepare");
             this.watershedTxnId =
                     Catalog.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
             createTempPartitions();
@@ -294,6 +294,7 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
 
     // export transaction id
     private void executeInsert() {
+        Preconditions.checkState(jobState.get() == OverwriteJobState.LOADING);
         LOG.info("start to execute insert");
         insertStmt.setOverwrite(false);
         try {
@@ -388,10 +389,7 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
     }
 
     private void commit() {
-        if (jobState.get() != OverwriteJobState.COMMITTING) {
-            LOG.warn("invalid job state:{} to finish", jobState);
-            return;
-        }
+        Preconditions.checkState(jobState.get() == OverwriteJobState.COMMITTING);
         LOG.info("start to commit insert overwrite job:{}", jobId);
         // try 3 times, or failed
         for (int i = 0; i < 3; i++) {
@@ -436,10 +434,7 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
     }
 
     private void startLoad() {
-        if (jobState.get() != OverwriteJobState.PREPARED) {
-            LOG.warn("invalid job state:{} to start load", jobState);
-            return;
-        }
+        Preconditions.checkState(jobState.get() == OverwriteJobState.PREPARED);
         try {
             // modify all the partitions in insertStmt
             LOG.info("start to load, jobId:{}", jobId);
