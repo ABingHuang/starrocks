@@ -679,6 +679,7 @@ public class AST2SQL {
             } else {
                 strBuilder.append(" INTO ");
             }
+            strBuilder.append(insertStmt.getTableName().toSql() + " ");
             strBuilder.append(visitQueryStatement(insertStmt.getQueryStatement(), context));
             return strBuilder.toString();
         }
