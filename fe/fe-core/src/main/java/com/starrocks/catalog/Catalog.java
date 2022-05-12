@@ -1307,7 +1307,7 @@ public class Catalog {
             startMasterOnlyDaemonThreads();
             // start other daemon threads that should running on all FE
             startNonMasterDaemonThreads();
-            insertOverwriteJobManager.reSubmitRunningJobs();
+            insertOverwriteJobManager.cancelRunningJobs();
 
             MetricRepo.init();
 

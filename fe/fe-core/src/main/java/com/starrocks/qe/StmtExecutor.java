@@ -130,6 +130,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
@@ -1025,12 +1026,17 @@ public class StmtExecutor {
 
         if (stmt instanceof InsertStmt && ((InsertStmt) stmt).isOverwrite()) {
             LOG.info("start to handle insert overwrite job");
+            InsertStmt insertStmt = (InsertStmt) stmt;
+            long dbId = ((InsertStmt) stmt).getDbObj().getId();
+            Set<Long> targetPartitionSet = insertStmt.getTargetPartitionIds().stream().collect(Collectors.toSet());
             InsertOverwriteJob insertOverwriteJob =
-                    new InsertOverwriteJob(context, Catalog.getCurrentCatalog().getNextId(), (InsertStmt) stmt);
+                    new InsertOverwriteJob(context, Catalog.getCurrentCatalog().getNextId(), insertStmt,
+                            dbId, insertStmt.getTargetTable().getId(),
+                            insertStmt.getTargetTable().getName(), targetPartitionSet);
             // add edit log
-            String insertStmtSql = AST2SQL.toString(stmt);
             CreateInsertOverwriteJobInfo info = new CreateInsertOverwriteJobInfo(insertOverwriteJob.getJobId(),
-                    insertOverwriteJob.getTargetDbId(), insertOverwriteJob.getTargetTableId(), insertStmtSql);
+                    insertOverwriteJob.getTargetDbId(), insertOverwriteJob.getTargetTableId(),
+                    insertOverwriteJob.getTargetTableName(), insertOverwriteJob.getTargetPartitionIds());
             LOG.info("create insert overwrite job info:{}", info);
             Catalog.getCurrentCatalog().getEditLog().logCreateInsertOverwrite(info);
             InsertOverwriteJobManager manager = Catalog.getCurrentCatalog().getInsertOverwriteJobManager();

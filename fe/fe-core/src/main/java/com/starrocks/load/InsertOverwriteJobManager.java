@@ -38,7 +38,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
     @SerializedName(value = "partitionsWithOverwrite")
     private Map<Long, Set<Long>> partitionsWithOverwrite;
 
-    private ExecutorService reSubmitExecutorService;
+    private ExecutorService cancelJobExecutorService;
 
     private List<InsertOverwriteJob> runningJobs;
 
@@ -47,8 +47,8 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
     public InsertOverwriteJobManager() {
         this.overwriteJobMap = Maps.newHashMap();
         this.partitionsWithOverwrite = Maps.newHashMap();
-        ThreadFactory threadFactory = new DefaultThreadFactory("resubmit-thread");
-        this.reSubmitExecutorService = Executors.newSingleThreadExecutor(threadFactory);
+        ThreadFactory threadFactory = new DefaultThreadFactory("cancel-thread");
+        this.cancelJobExecutorService = Executors.newSingleThreadExecutor(threadFactory);
         this.runningJobs = Lists.newArrayList();
         this.lock = new ReentrantReadWriteLock();
     }
@@ -173,7 +173,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
     public void replayCreateInsertOverwrite(CreateInsertOverwriteJobInfo jobInfo) {
         try {
             InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(jobInfo.getJobId(),
-                    jobInfo.getDbId(), jobInfo.getTableId(), jobInfo.getOriginInsertSql());
+                    jobInfo.getDbId(), jobInfo.getTableId(), jobInfo.getTableName(), jobInfo.getTargetPartitionIds());
             boolean registered = registerOverwriteJob(insertOverwriteJob);
             if (!registered) {
                 LOG.warn("register insert overwrite job failed. jobId:{}", insertOverwriteJob.getJobId());
@@ -200,10 +200,10 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
         }
     }
 
-    public void reSubmitRunningJobs() {
+    public void cancelRunningJobs() {
         // resubmit running insert overwrite jobs
         if (!Catalog.isCheckpointThread()) {
-            reSubmitExecutorService.submit(() -> {
+            cancelJobExecutorService.submit(() -> {
                 // wait until serving catalog is ready
                 while (!Catalog.getServingCatalog().isReady()) {
                     try {
@@ -214,11 +214,22 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
                         LOG.warn("InsertOverwriteJobManager runAfterCatalogReady interrupted exception.", e);
                     }
                 }
-                LOG.info("start to resubmit running jobs, size:{}", runningJobs.size());
+                LOG.info("start to cancel running jobs, size:{}", runningJobs.size());
                 if (runningJobs != null) {
                     for (InsertOverwriteJob job : runningJobs) {
-                        LOG.info("start to resubmit insert overwrite job:{}", job.getJobId());
-                        submitJob(job);
+                        LOG.info("start to gc insert overwrite job:{}", job.getJobId());
+                        try {
+                            if (job.getJobState() == InsertOverwriteJob.OverwriteJobState.COMMITTING) {
+                                // if the state is COMMITTING, then it means the creation of temp partitions
+                                // and the insert are successful. So treat this state as success.
+                                // just recommit the insert overwrite
+                                job.handle();
+                            } else {
+                                job.cancel();
+                            }
+                        } finally {
+                            deregisterOverwriteJob(job.getJobId());
+                        }
                     }
                     runningJobs = null;
                 }

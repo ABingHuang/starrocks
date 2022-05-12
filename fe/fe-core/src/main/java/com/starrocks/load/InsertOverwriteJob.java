@@ -8,7 +8,6 @@ import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.PartitionNames;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -17,6 +16,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -53,9 +53,6 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
     @SerializedName(value = "insertOverwriteSql")
     private String insertOverwriteSql;
 
-    @SerializedName(value = "jobState")
-    private AtomicReference<OverwriteJobState> jobState;
-
     public enum OverwriteJobState {
         PENDING,
         PREPARED,
@@ -65,54 +62,60 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
         FAILED,
         CANCELLED
     }
+    @SerializedName(value = "jobState")
+    private AtomicReference<OverwriteJobState> jobState;
 
     @SerializedName(value = "sourcePartitionNames")
-    List<String> sourcePartitionNames;
+    private List<String> sourcePartitionNames;
 
     @SerializedName(value = "newPartitionNames")
-    List<String> newPartitionNames;
+    private List<String> newPartitionNames;
 
-    @SerializedName(value = "watershedTxnId")
-    protected long watershedTxnId = -1;
+    @SerializedName(value = "dbId")
+    private long dbId;
 
-    private OlapTable targetTable;
-    Database db;
+    @SerializedName(value = "targetTableId")
+    private long targetTableId;
+
+    @SerializedName(value = "targetTableName")
+    private String targetTableName;
+
+    @SerializedName(value = "targetTableId")
+    private Set<Long> targetPartitionIds;
+
+    private long watershedTxnId = -1;
     // isOverwrite is false, changed to insert into
     private InsertStmt insertStmt;
     private ConnectContext context;
+    // used to cancel job
     private Object cv;
 
     private boolean isCancelled = false;
 
-    public InsertOverwriteJob(ConnectContext context, long jobId, InsertStmt insertStmt) {
+    public InsertOverwriteJob(ConnectContext context, long jobId, InsertStmt insertStmt,
+                              long dbId, long targetTableId, String targetTableName, Set<Long> targetPartitionIds) {
         this.context = context;
         this.jobId = jobId;
         this.jobState = new AtomicReference<>(OverwriteJobState.PENDING);
         this.insertStmt = insertStmt;
-        this.targetTable = (OlapTable) insertStmt.getTargetTable();
-        this.db = Catalog.getCurrentCatalog().getDb(insertStmt.getDb());
+        this.dbId = dbId;
+        this.targetTableId = targetTableId;
+        this.targetTableName = targetTableName;
+        this.targetPartitionIds = targetPartitionIds;
         this.cv = new Object();
     }
 
     // used to replay InsertOverwriteJob
-    public InsertOverwriteJob(long jobId, long dbId, long tableId, String originInsertSql) {
+    public InsertOverwriteJob(long jobId, long dbId, long targetTableId, String targetTableName, Set<Long> targetPartitionIds) {
         this.context = new ConnectContext();
         context.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         this.jobId = jobId;
         this.jobState = new AtomicReference<>(OverwriteJobState.PENDING);
-        this.db = Catalog.getCurrentCatalog().getDb(dbId);
-        this.targetTable = (OlapTable) db.getTable(tableId);
+        this.dbId = dbId;
+        this.targetTableId = targetTableId;
+        this.targetTableName = targetTableName;
+        this.targetPartitionIds = targetPartitionIds;
         this.cv = new Object();
-
-        try {
-            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(
-                    originInsertSql, context.getSessionVariable().getSqlMode());
-            this.insertStmt = (InsertStmt) stmts.get(0);
-            InsertAnalyzer.analyze(insertStmt, context);
-        } catch (Exception exception) {
-            LOG.warn("parse sql error. originInsertSql:{}", originInsertSql, exception);
-            throw exception;
-        }
     }
 
     @Override
@@ -123,11 +126,11 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
     }
 
     public long getTargetDbId() {
-        return db.getId();
+        return dbId;
     }
 
     public long getTargetTableId() {
-        return targetTable.getId();
+        return targetTableId;
     }
 
     public long getJobId() {
@@ -139,11 +142,11 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
     }
 
     public String getTargetTableName() {
-        return targetTable.getName();
+        return targetTableName;
     }
 
     public Set<Long> getTargetPartitionIds() {
-        return insertStmt.getTargetPartitionIds().stream().collect(Collectors.toSet());
+        return targetPartitionIds;
     }
 
     public OverwriteJobState getJobState() {
@@ -162,6 +165,7 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
             cv.notifyAll();
             transferTo(OverwriteJobState.CANCELLED);
         } catch (Exception e) {
+            LOG.warn("cancel insert overwrite job:{} failed", jobId);
             return false;
         }
         return true;
@@ -172,31 +176,12 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
         // parse insertOverwriteSql back to InsertStmt
         LOG.info("parse insertOverwriteSql back to InsertStmt");
         this.context = new ConnectContext();
-        try {
-            List<StatementBase> stmts =
-                    com.starrocks.sql.parser.SqlParser.parse(insertOverwriteSql,
-                            context.getSessionVariable().getSqlMode());
-            Preconditions.checkState(stmts.size() == 1);
-            insertStmt = (InsertStmt) stmts.get(0);
-            InsertAnalyzer.analyze(insertStmt, context);
-            this.db = Catalog.getCurrentCatalog().getDb(insertStmt.getDb());
-            this.targetTable = (OlapTable) insertStmt.getTargetTable();
-            this.cv = new Object();
-        } catch (Exception e) {
-            LOG.warn("invalid insertOverwriteSql:{}", insertOverwriteSql, e);
-        }
+        this.cv = new Object();
     }
 
     public OverwriteJobState run() {
         handle();
         return jobState.get();
-    }
-
-    public OverwriteJobState restart() {
-        LOG.info("restart insert overwrite job:{}", jobId);
-        gc();
-        jobState.set(OverwriteJobState.PENDING);
-        return run();
     }
 
     public void replayStateChange(InsertOverwriteStateChangeInfo info) {
@@ -208,7 +193,6 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
         // state can not be PENDING here
         switch (info.getToState()) {
             case PREPARED:
-                watershedTxnId = info.getWatershedTxnId();
                 sourcePartitionNames = info.getSourcePartitionNames();
                 newPartitionNames = info.getNewPartitionsName();
                 jobState.set(OverwriteJobState.PREPARED);
@@ -270,7 +254,7 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
     private void transferTo(OverwriteJobState state) {
         InsertOverwriteStateChangeInfo info =
                 new InsertOverwriteStateChangeInfo(jobId, jobState.get(), state,
-                        sourcePartitionNames, newPartitionNames, watershedTxnId);
+                        sourcePartitionNames, newPartitionNames);
         Catalog.getCurrentCatalog().getEditLog().logInsertOverwriteStateChange(info);
         jobState.set(state);
         handle();
@@ -319,6 +303,22 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
     }
 
     private void createTempPartitions() {
+        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        if (db == null) {
+            LOG.warn("db[{}] does not exist", dbId);
+            throw new RuntimeException("db does not exist");
+        }
+        OlapTable targetTable;
+        db.readLock();
+        try {
+            targetTable = (OlapTable) db.getTable(targetTableId);
+            if (targetTable == null) {
+                LOG.warn("table:{} tableId[{}] does not exist in db:{}", targetTableName, targetTableId, dbId);
+                throw new RuntimeException("table does not exist");
+            }
+        } finally {
+            db.readUnlock();
+        }
         // make temp partitions for targetPartitions
         String postfix = "_" + jobId;
         List<Partition> sourcePartitions = insertStmt.getTargetPartitionIds().stream()
@@ -371,12 +371,23 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
 
     private void gc() {
         LOG.info("start to garbage collect");
+        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        if (db == null) {
+            LOG.warn("db[{}] does not exist", dbId);
+            throw new RuntimeException("db does not exist");
+        }
         db.writeLock();
         try {
+            OlapTable targetTable = (OlapTable) db.getTable(targetTableId);
+            if (targetTable == null) {
+                LOG.warn("tablet:{} tableId[{}] does not exist in db:{}", targetTableName, targetTableId, dbId);
+                throw new RuntimeException("table does not exist");
+            }
             // pay attention to failover and edit log info
             if (newPartitionNames != null) {
                 for (String partitionName : newPartitionNames) {
-                    LOG.info("drop partition:{}, id:{}", partitionName, targetTable.getPartition(partitionName, true).getId());
+                    LOG.info("drop partition:{}, id:{}", partitionName,
+                            targetTable.getPartition(partitionName, true).getId());
                     targetTable.dropTempPartition(partitionName, true);
                     DropPartitionInfo info = new DropPartitionInfo(db.getId(), targetTable.getId(),
                             partitionName, true, true);
@@ -409,8 +420,18 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
     }
 
     private boolean doCommit() {
+        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        if (db == null) {
+            LOG.warn("db:{} does not exist", dbId);
+            throw new RuntimeException("db does not exist");
+        }
         db.writeLock();
         try {
+            OlapTable targetTable = (OlapTable) db.getTable(targetTableId);
+            if (targetTable == null) {
+                LOG.warn("tablet:{} tableId[{}] does not exist in db:{}", targetTableName, targetTableId, dbId);
+                throw new RuntimeException("table does not exist");
+            }
             if (targetTable.getPartitionInfo().getType() == PartitionType.RANGE) {
                 targetTable.replaceTempPartitions(sourcePartitionNames, newPartitionNames, true, false);
             } else {
@@ -419,8 +440,8 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
                 targetTable.replacePartition(sourcePartitionNames.get(0), newPartitionNames.get(0));
             }
         } catch (Exception e) {
-            LOG.warn("replace partitions failed when insert overwrite into tableId:{}, tableName:{}",
-                    targetTable.getId(), targetTable.getName(), e);
+            LOG.warn("replace partitions failed when insert overwrite into tableId:{}, table:{}",
+                    targetTableId, targetTableName, e);
             return false;
         } finally {
             db.writeUnlock();
@@ -430,18 +451,30 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
 
     protected boolean isPreviousLoadFinished() throws AnalysisException {
         return Catalog.getCurrentGlobalTransactionMgr()
-                .isPreviousTransactionsFinished(watershedTxnId, db.getId(), Lists.newArrayList(targetTable.getId()));
+                .isPreviousTransactionsFinished(watershedTxnId, dbId, Lists.newArrayList(targetTableId));
     }
 
     private void startLoad() {
         Preconditions.checkState(jobState.get() == OverwriteJobState.PREPARED);
+        Preconditions.checkState(insertStmt != null);
         try {
             // modify all the partitions in insertStmt
             LOG.info("start to load, jobId:{}", jobId);
+            Database db = Catalog.getCurrentCatalog().getDb(dbId);
+            if (db == null) {
+                LOG.warn("db:{} does not exist", dbId);
+                throw new RuntimeException("db does not exist");
+            }
             db.readLock();
             try {
+                OlapTable targetTable = (OlapTable) db.getTable(targetTableId);
+                if (targetTable == null) {
+                    LOG.warn("table:{} tableId[{}] does not exist in db:{}", targetTableName, targetTableId, dbId);
+                    throw new RuntimeException("table does not exist");
+                }
                 List<Long> newPartitionIds = newPartitionNames.stream()
-                        .map(partitionName -> targetTable.getPartition(partitionName, true).getId()).collect(Collectors.toList());
+                        .map(partitionName -> targetTable.getPartition(partitionName, true).getId())
+                        .collect(Collectors.toList());
                 LOG.info("newPartitionIds:{}",
                         Strings.join(newPartitionIds.stream().map(id -> id.toString()).collect(Collectors.toList()), ","));
                 PartitionNames partitionNames = new PartitionNames(true, newPartitionNames);

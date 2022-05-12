@@ -10,6 +10,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Set;
 
 public class CreateInsertOverwriteJobInfo implements Writable {
     @SerializedName(value = "jobId")
@@ -21,14 +22,19 @@ public class CreateInsertOverwriteJobInfo implements Writable {
     @SerializedName(value = "tableId")
     private long tableId;
 
-    @SerializedName(value = "originInsertSql")
-    private String originInsertSql;
+    @SerializedName(value = "tableName")
+    private String tableName;
 
-    public CreateInsertOverwriteJobInfo(long jobId, long dbId, long tableId, String originInsertSql) {
+    @SerializedName(value = "targetPartitionIds")
+    private Set<Long> targetPartitionIds;
+
+    public CreateInsertOverwriteJobInfo(long jobId, long dbId, long tableId,
+                                        String tableName, Set<Long> targetPartitionIds) {
         this.jobId = jobId;
         this.dbId = dbId;
         this.tableId = tableId;
-        this.originInsertSql = originInsertSql;
+        this.tableName = tableName;
+        this.targetPartitionIds = targetPartitionIds;
     }
 
     public long getJobId() {
@@ -55,12 +61,20 @@ public class CreateInsertOverwriteJobInfo implements Writable {
         this.tableId = tableId;
     }
 
-    public String getOriginInsertSql() {
-        return originInsertSql;
+    public String getTableName() {
+        return tableName;
     }
 
-    public void setOriginInsertSql(String originInsertSql) {
-        this.originInsertSql = originInsertSql;
+    public void setTableName(String tableName) {
+        this.tableName = tableName;
+    }
+
+    public Set<Long> getTargetPartitionIds() {
+        return targetPartitionIds;
+    }
+
+    public void setTargetPartitionIds(Set<Long> targetPartitionIds) {
+        this.targetPartitionIds = targetPartitionIds;
     }
 
     @Override
@@ -69,7 +83,7 @@ public class CreateInsertOverwriteJobInfo implements Writable {
                 "jobId=" + jobId +
                 ", dbId=" + dbId +
                 ", tableId=" + tableId +
-                ", originInsertSql='" + originInsertSql + '\'' +
+                ", targetPartitionIds=" + targetPartitionIds +
                 '}';
     }
 
