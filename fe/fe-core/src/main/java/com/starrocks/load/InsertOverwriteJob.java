@@ -6,6 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.alter.AlterCancelException;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.StatementBase;
@@ -17,6 +18,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.AddPartitionsInfo;
@@ -39,6 +41,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -70,11 +73,17 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
     @SerializedName(value = "newPartitionNames")
     List<String> newPartitionNames;
 
+    @SerializedName(value = "watershedTxnId")
+    protected long watershedTxnId = -1;
+
     private OlapTable targetTable;
     Database db;
     // isOverwrite is false, changed to insert into
     private InsertStmt insertStmt;
     private ConnectContext context;
+    private Object cv;
+
+    private boolean isCancelled = false;
 
     public InsertOverwriteJob(ConnectContext context, long jobId, InsertStmt insertStmt) {
         this.context = context;
@@ -83,6 +92,7 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
         this.insertStmt = insertStmt;
         this.targetTable = (OlapTable) insertStmt.getTargetTable();
         this.db = Catalog.getCurrentCatalog().getDb(insertStmt.getDb());
+        this.cv = new Object();
     }
 
     // used to replay InsertOverwriteJob
@@ -93,6 +103,7 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
         this.jobState = new AtomicReference<>(OverwriteJobState.PENDING);
         this.db = Catalog.getCurrentCatalog().getDb(dbId);
         this.targetTable = (OlapTable) db.getTable(tableId);
+        this.cv = new Object();
 
         try {
             List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(
@@ -132,8 +143,8 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
         return targetTable.getName();
     }
 
-    public List<Long> getTargetPartitionIds() {
-        return insertStmt.getTargetPartitionIds();
+    public Set<Long> getTargetPartitionIds() {
+        return insertStmt.getTargetPartitionIds().stream().collect(Collectors.toSet());
     }
 
     public OverwriteJobState getJobState() {
@@ -148,6 +159,8 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
 
     public boolean cancel() {
         try {
+            isCancelled = true;
+            cv.notifyAll();
             transferTo(OverwriteJobState.CANCELLED);
         } catch (Exception e) {
             return false;
@@ -169,6 +182,7 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
             InsertAnalyzer.analyze(insertStmt, context);
             this.db = Catalog.getCurrentCatalog().getDb(insertStmt.getDb());
             this.targetTable = (OlapTable) insertStmt.getTargetTable();
+            this.cv = new Object();
         } catch (Exception e) {
             LOG.warn("invalid insertOverwriteSql:{}", insertOverwriteSql, e);
         }
@@ -195,6 +209,7 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
         // state can not be PENDING here
         switch (info.getToState()) {
             case PREPARED:
+                watershedTxnId = info.getWatershedTxnId();
                 sourcePartitionNames = info.getSourcePartitionNames();
                 newPartitionNames = info.getNewPartitionsName();
                 jobState.set(OverwriteJobState.PREPARED);
@@ -255,7 +270,8 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
 
     private void transferTo(OverwriteJobState state) {
         InsertOverwriteStateChangeInfo info =
-                new InsertOverwriteStateChangeInfo(jobId, jobState.get(), state, sourcePartitionNames, newPartitionNames);
+                new InsertOverwriteStateChangeInfo(jobId, jobState.get(), state,
+                        sourcePartitionNames, newPartitionNames, watershedTxnId);
         Catalog.getCurrentCatalog().getEditLog().logInsertOverwriteStateChange(info);
         jobState.set(state);
         handle();
@@ -267,6 +283,8 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
             return;
         }
         try {
+            this.watershedTxnId =
+                    Catalog.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
             createTempPartitions();
             transferTo(OverwriteJobState.PREPARED);
         } catch (Exception e) {
@@ -413,6 +431,11 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
         return true;
     }
 
+    protected boolean isPreviousLoadFinished() throws AnalysisException {
+        return Catalog.getCurrentGlobalTransactionMgr()
+                .isPreviousTransactionsFinished(watershedTxnId, db.getId(), Lists.newArrayList(targetTable.getId()));
+    }
+
     private void startLoad() {
         if (jobState.get() != OverwriteJobState.PREPARED) {
             LOG.warn("invalid job state:{} to start load", jobState);
@@ -433,6 +456,13 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
             } finally {
                 db.readUnlock();
             }
+
+            LOG.info("start to wait previous load finish. watershedTxnId:{}", watershedTxnId);
+            while (!isCancelled && !isPreviousLoadFinished()) {
+                cv.wait(1000);
+            }
+            LOG.info("wait finished. isCancelled:{}, isPreviousLoadFinished:{}",
+                    isCancelled, isPreviousLoadFinished());
 
             transferTo(OverwriteJobState.LOADING);
         } catch (Exception e) {

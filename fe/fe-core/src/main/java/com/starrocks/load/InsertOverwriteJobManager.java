@@ -47,7 +47,6 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
     public InsertOverwriteJobManager() {
         this.overwriteJobMap = Maps.newHashMap();
         this.partitionsWithOverwrite = Maps.newHashMap();
-        // TODO: add named and limited thread pool
         ThreadFactory threadFactory = new DefaultThreadFactory("resubmit-thread");
         this.reSubmitExecutorService = Executors.newSingleThreadExecutor(threadFactory);
         this.runningJobs = Lists.newArrayList();
@@ -147,7 +146,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
         }
     }
 
-    public boolean hasRunningOverwriteJob(Long tableId, List<Long> partitions) {
+    public boolean hasRunningOverwriteJob(Long tableId, Set<Long> partitions) {
         lock.readLock().lock();
         try {
             boolean tableExist = partitionsWithOverwrite.containsKey(tableId);

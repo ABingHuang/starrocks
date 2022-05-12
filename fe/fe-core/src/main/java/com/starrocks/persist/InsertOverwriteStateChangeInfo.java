@@ -25,14 +25,19 @@ public class InsertOverwriteStateChangeInfo implements Writable {
     @SerializedName(value = "newPartitionNames")
     private List<String> newPartitionNames;
 
+    @SerializedName(value = "watershedTxnId")
+    private long watershedTxnId;
+
     public InsertOverwriteStateChangeInfo(long jobId, InsertOverwriteJob.OverwriteJobState fromState,
                                           InsertOverwriteJob.OverwriteJobState toState,
-                                          List<String> sourcePartitionNames, List<String> newPartitionNames) {
+                                          List<String> sourcePartitionNames, List<String> newPartitionNames,
+                                          long watershedTxnId) {
         this.jobId = jobId;
         this.fromState = fromState;
         this.toState = toState;
         this.sourcePartitionNames = sourcePartitionNames;
         this.newPartitionNames = newPartitionNames;
+        this.watershedTxnId = watershedTxnId;
     }
 
     public long getJobId() {
@@ -71,13 +76,19 @@ public class InsertOverwriteStateChangeInfo implements Writable {
         this.newPartitionNames = newPartitionsName;
     }
 
+    public long getWatershedTxnId() {
+        return watershedTxnId;
+    }
+
     @Override
     public String toString() {
         return "InsertOverwriteStateChangeInfo{" +
                 "jobId=" + jobId +
                 ", fromState=" + fromState +
                 ", toState=" + toState +
+                ", sourcePartitionNames=" + sourcePartitionNames +
                 ", newPartitionNames=" + newPartitionNames +
+                ", watershedTxnId=" + watershedTxnId +
                 '}';
     }
 
