@@ -261,12 +261,9 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
     private void prepare() {
         Preconditions.checkState(jobState.get() == OverwriteJobState.PENDING);
         try {
-            /*
             LOG.info("start to sleep in prepare");
             Thread.sleep(20000);
             LOG.info("finish sleep in prepare");
-
-             */
             this.watershedTxnId =
                     Catalog.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
             createTempPartitions();
