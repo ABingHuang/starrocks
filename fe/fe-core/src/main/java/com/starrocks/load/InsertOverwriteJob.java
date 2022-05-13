@@ -34,6 +34,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
 
+import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
@@ -123,6 +124,12 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
         Text.writeString(out, json);
     }
 
+    public static InsertOverwriteJob read(DataInput in) throws IOException {
+        String json = Text.readString(in);
+        InsertOverwriteJob job = GsonUtils.GSON.fromJson(json, InsertOverwriteJob.class);
+        return job;
+    }
+
     public long getTargetDbId() {
         return dbId;
     }
@@ -160,7 +167,9 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
     public boolean cancel() {
         try {
             isCancelled = true;
-            cv.notifyAll();
+            if (cv != null) {
+                cv.notifyAll();
+            }
             transferTo(OverwriteJobState.CANCELLED);
         } catch (Exception e) {
             LOG.warn("cancel insert overwrite job:{} failed", jobId, e);

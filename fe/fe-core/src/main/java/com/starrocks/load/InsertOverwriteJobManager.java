@@ -243,13 +243,8 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
     }
 
     public static InsertOverwriteJobManager read(DataInput in) throws IOException {
-        // read other fields in gson
         String json = Text.readString(in);
         InsertOverwriteJobManager jobManager = GsonUtils.GSON.fromJson(json, InsertOverwriteJobManager.class);
-
-        // In the present, the fullSchema could be rebuilt by schema change while the properties is changed by MV.
-        // After that, some properties of fullSchema and nameToColumn may be not same as properties of base columns.
-        // So, here we need to rebuild the fullSchema to ensure the correctness of the properties.
         return jobManager;
     }
 
