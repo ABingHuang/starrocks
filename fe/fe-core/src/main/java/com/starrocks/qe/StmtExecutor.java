@@ -1026,11 +1026,14 @@ public class StmtExecutor {
         if (stmt instanceof InsertStmt && ((InsertStmt) stmt).isOverwrite()) {
             LOG.info("start to handle insert overwrite job");
             InsertStmt insertStmt = (InsertStmt) stmt;
-            long dbId = ((InsertStmt) stmt).getDbObj().getId();
+            Database db = Catalog.getCurrentCatalog().getDb(insertStmt.getDb());
+            if (db == null) {
+                throw new RuntimeException("db " + insertStmt.getDb() + " do not exist.");
+            }
             Set<Long> targetPartitionSet = insertStmt.getTargetPartitionIds().stream().collect(Collectors.toSet());
             InsertOverwriteJob insertOverwriteJob =
                     new InsertOverwriteJob(context, Catalog.getCurrentCatalog().getNextId(), insertStmt,
-                            dbId, insertStmt.getTargetTable().getId(),
+                            db.getId(), insertStmt.getTargetTable().getId(),
                             insertStmt.getTargetTable().getName(), targetPartitionSet);
             // add edit log
             CreateInsertOverwriteJobInfo info = new CreateInsertOverwriteJobInfo(insertOverwriteJob.getJobId(),
