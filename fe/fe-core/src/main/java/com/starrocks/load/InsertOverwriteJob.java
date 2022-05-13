@@ -283,6 +283,9 @@ public class InsertOverwriteJob implements Writable {
         LOG.info("start to execute insert");
         insertStmt.setOverwrite(false);
         try {
+            LOG.info("start to sleep in executeInsert");
+            Thread.sleep(20000);
+            LOG.info("finish sleep in executeInsert");
             StmtExecutor stmtExecutor = new StmtExecutor(context, insertStmt);
             stmtExecutor.execute();
             LOG.info("execute insert finished");
@@ -491,10 +494,6 @@ public class InsertOverwriteJob implements Writable {
             }
             LOG.info("wait finished. isCancelled:{}, isPreviousLoadFinished:{}",
                     isCancelled, isPreviousLoadFinished());
-
-            LOG.info("start to sleep in startLoad");
-            Thread.sleep(20000);
-            LOG.info("finish sleep in startLoad");
             transferTo(OverwriteJobState.LOADING);
         } catch (Exception e) {
             LOG.warn("insert overwrite job:{} failed in loading.", jobId, e);
