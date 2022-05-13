@@ -163,7 +163,7 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
             cv.notifyAll();
             transferTo(OverwriteJobState.CANCELLED);
         } catch (Exception e) {
-            LOG.warn("cancel insert overwrite job:{} failed", jobId);
+            LOG.warn("cancel insert overwrite job:{} failed", jobId, e);
             return false;
         }
         return true;
@@ -253,6 +253,7 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
         InsertOverwriteStateChangeInfo info =
                 new InsertOverwriteStateChangeInfo(jobId, jobState.get(), state,
                         sourcePartitionNames, newPartitionNames);
+        LOG.info("InsertOverwriteStateChangeInfo:{}", info);
         Catalog.getCurrentCatalog().getEditLog().logInsertOverwriteStateChange(info);
         jobState.set(state);
         handle();
