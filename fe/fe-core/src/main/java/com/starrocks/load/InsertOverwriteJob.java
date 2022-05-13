@@ -16,7 +16,6 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -30,7 +29,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.analyzer.AST2SQL;
-import com.starrocks.sql.analyzer.InsertAnalyzer;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -267,7 +265,7 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
             LOG.info("start to sleep in prepare");
             Thread.sleep(20000);
             LOG.info("finish sleep in prepare");
-            
+
              */
             this.watershedTxnId =
                     Catalog.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();

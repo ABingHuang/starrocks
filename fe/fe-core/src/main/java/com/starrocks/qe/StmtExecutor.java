@@ -96,7 +96,6 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
-import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
