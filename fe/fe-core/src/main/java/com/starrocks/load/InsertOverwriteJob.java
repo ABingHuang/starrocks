@@ -391,9 +391,11 @@ public class InsertOverwriteJob implements Writable {
                     LOG.info("drop partition:{}, id:{}", partitionName,
                             targetTable.getPartition(partitionName, true).getId());
                     targetTable.dropTempPartition(partitionName, true);
+                    /*
                     DropPartitionInfo info = new DropPartitionInfo(db.getId(), targetTable.getId(),
                             partitionName, true, true);
                     Catalog.getCurrentCatalog().getEditLog().logDropPartition(info);
+                     */
                 }
             }
         } finally {
