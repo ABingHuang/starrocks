@@ -43,14 +43,11 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
-public class InsertOverwriteJob implements Writable, GsonPostProcessable {
+public class InsertOverwriteJob implements Writable {
     private static final Logger LOG = LogManager.getLogger(InsertOverwriteJob.class);
 
     @SerializedName(value = "jobId")
     private long jobId;
-
-    @SerializedName(value = "insertOverwriteSql")
-    private String insertOverwriteSql;
 
     public enum OverwriteJobState {
         PENDING,
@@ -106,8 +103,8 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
 
     // used to replay InsertOverwriteJob
     public InsertOverwriteJob(long jobId, long dbId, long targetTableId, String targetTableName, Set<Long> targetPartitionIds) {
-        this.context = new ConnectContext();
-        context.setCluster(SystemInfoService.DEFAULT_CLUSTER);
+        // this.context = new ConnectContext();
+        // context.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         this.jobId = jobId;
         this.jobState = new AtomicReference<>(OverwriteJobState.PENDING);
         this.dbId = dbId;
@@ -119,7 +116,6 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        insertOverwriteSql = AST2SQL.toString(insertStmt);
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
     }
@@ -167,8 +163,10 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
     public boolean cancel() {
         try {
             isCancelled = true;
-            synchronized (cv) {
-                cv.notifyAll();
+            if (cv != null) {
+                synchronized (cv) {
+                    cv.notifyAll();
+                }
             }
             transferTo(OverwriteJobState.CANCELLED);
         } catch (Exception e) {
@@ -178,13 +176,14 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
         return true;
     }
 
+    /*
     @Override
     public void gsonPostProcess() throws IOException {
-        // parse insertOverwriteSql back to InsertStmt
-        LOG.info("parse insertOverwriteSql back to InsertStmt");
         this.context = new ConnectContext();
         this.cv = new Object();
     }
+
+     */
 
     public OverwriteJobState run() {
         handle();
@@ -305,8 +304,6 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
             // init loadFuture and add listener
         } catch (Throwable t) {
             LOG.warn("insert overwrite job:{} failed", jobId, t);
-            // ((CreateTableAsSelectStmt) parsedStmt).dropTable(context);
-            // throw new RuntimeException("insert overwrite job failed", t);
         }
     }
 
