@@ -381,17 +381,16 @@ public class InsertOverwriteJob implements Writable {
                 LOG.warn("tablet:{} tableId[{}] does not exist in db:{}", targetTableName, targetTableId, dbId);
                 throw new RuntimeException("table does not exist");
             }
-            // pay attention to failover and edit log info
             if (newPartitionNames != null) {
                 for (String partitionName : newPartitionNames) {
-                    LOG.info("drop partition:{}, id:{}", partitionName,
-                            targetTable.getPartition(partitionName, true).getId());
-                    targetTable.dropTempPartition(partitionName, true);
-                    /*
-                    DropPartitionInfo info = new DropPartitionInfo(db.getId(), targetTable.getId(),
-                            partitionName, true, true);
-                    Catalog.getCurrentCatalog().getEditLog().logDropPartition(info);
-                     */
+                    LOG.info("drop partition:{}", partitionName);
+
+                    Partition partition = targetTable.getPartition(partitionName, true);
+                    if (partition != null) {
+                        targetTable.dropTempPartition(partitionName, true);
+                    } else {
+                        LOG.warn("partition is null for name:{}", partitionName);
+                    }
                 }
             }
         } finally {
@@ -402,24 +401,20 @@ public class InsertOverwriteJob implements Writable {
     private void commit() {
         Preconditions.checkState(jobState.get() == OverwriteJobState.COMMITTING);
         LOG.info("start to commit insert overwrite job:{}", jobId);
-        // try 3 times, or failed
-        for (int i = 0; i < 3; i++) {
-            try {
-                LOG.info("start to sleep in commit");
-                Thread.sleep(20000);
-                LOG.info("finish sleep in commit");
-                boolean ret = doCommit();
-                if (ret) {
-                    transferTo(OverwriteJobState.SUCCESS);
-                    LOG.info("commit success, jobId:{}", jobId);
-                    return;
-                }
-            } catch (Exception exp) {
-                LOG.warn("transferToSuccess failed. will retry", exp);
+        try {
+            LOG.info("start to sleep in commit");
+            Thread.sleep(20000);
+            LOG.info("finish sleep in commit");
+            boolean ret = doCommit();
+            if (ret) {
+                transferTo(OverwriteJobState.SUCCESS);
+                LOG.info("commit success, jobId:{}", jobId);
+                return;
             }
+        } catch (Exception exp) {
+            LOG.warn("commit failed. there maybe some serious errors");
+            transferTo(OverwriteJobState.FAILED);
         }
-        LOG.warn("commit failed. there maybe some serious errors");
-        transferTo(OverwriteJobState.FAILED);
     }
 
     private boolean doCommit() {
