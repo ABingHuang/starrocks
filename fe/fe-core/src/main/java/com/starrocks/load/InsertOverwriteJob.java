@@ -20,7 +20,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.AddPartitionsInfo;
-import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.gson.GsonUtils;
