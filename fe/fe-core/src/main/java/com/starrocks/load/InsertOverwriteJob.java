@@ -167,7 +167,7 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
     public boolean cancel() {
         try {
             isCancelled = true;
-            if (cv != null) {
+            synchronized(cv) {
                 cv.notifyAll();
             }
             transferTo(OverwriteJobState.CANCELLED);
@@ -494,7 +494,9 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
 
             LOG.info("start to wait previous load finish. watershedTxnId:{}", watershedTxnId);
             while (!isCancelled && !isPreviousLoadFinished()) {
-                cv.wait(1000);
+                synchronized(cv){
+                    cv.wait(1000);
+                }
             }
             LOG.info("wait finished. isCancelled:{}, isPreviousLoadFinished:{}",
                     isCancelled, isPreviousLoadFinished());
