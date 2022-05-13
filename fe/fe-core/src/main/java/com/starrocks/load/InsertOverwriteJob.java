@@ -17,6 +17,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.AddPartitionsInfo;
@@ -195,7 +196,6 @@ public class InsertOverwriteJob implements Writable {
                 break;
             case COMMITTING:
                 jobState.set(OverwriteJobState.COMMITTING);
-                doCommit();
                 break;
             case FAILED:
                 jobState.set(OverwriteJobState.FAILED);
@@ -209,6 +209,7 @@ public class InsertOverwriteJob implements Writable {
                 break;
             case SUCCESS:
                 jobState.set(OverwriteJobState.SUCCESS);
+                doCommit();
                 LOG.info("replay insert overwrite job:{} to SUCCESS", jobId);
                 break;
             default:
@@ -229,6 +230,7 @@ public class InsertOverwriteJob implements Writable {
                 break;
             case COMMITTING:
                 commit();
+                LOG.info("insert overwrite job:{} commit success", jobId);
                 break;
             case FAILED:
             case CANCELLED:
@@ -265,7 +267,6 @@ public class InsertOverwriteJob implements Writable {
         }
     }
 
-    // export transaction id
     private void executeInsert() {
         Preconditions.checkState(jobState.get() == OverwriteJobState.LOADING);
         LOG.info("start to execute insert");
@@ -275,15 +276,11 @@ public class InsertOverwriteJob implements Writable {
             stmtExecutor.execute();
             LOG.info("execute insert finished");
             if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-                // ((CreateTableAsSelectStmt) parsedStmt).dropTable(context);
-                // drop temp partitions
                 LOG.warn("execute insert failed, jobId:{}", jobId);
-                // throw new RuntimeException("insert failed");
                 transferTo(OverwriteJobState.FAILED);
                 return;
             }
             transferTo(OverwriteJobState.COMMITTING);
-            // init loadFuture and add listener
         } catch (Throwable t) {
             LOG.warn("insert overwrite job:{} failed", jobId, t);
         }
@@ -394,19 +391,14 @@ public class InsertOverwriteJob implements Writable {
             LOG.info("start to sleep in commit");
             Thread.sleep(20000);
             LOG.info("finish sleep in commit");
-            boolean ret = doCommit();
-            if (ret) {
-                transferTo(OverwriteJobState.SUCCESS);
-                LOG.info("commit success, jobId:{}", jobId);
-                return;
-            }
+            doCommit();
         } catch (Exception exp) {
             LOG.warn("commit failed. there maybe some serious errors");
             transferTo(OverwriteJobState.FAILED);
         }
     }
 
-    private boolean doCommit() {
+    private void doCommit() {
         Database db = Catalog.getCurrentCatalog().getDb(dbId);
         if (db == null) {
             LOG.warn("db:{} does not exist", dbId);
@@ -429,11 +421,10 @@ public class InsertOverwriteJob implements Writable {
         } catch (Exception e) {
             LOG.warn("replace partitions failed when insert overwrite into tableId:{}, table:{}",
                     targetTableId, targetTableName, e);
-            return false;
+            throw new RuntimeException("replace partitions failed", e);
         } finally {
             db.writeUnlock();
         }
-        return true;
     }
 
     protected boolean isPreviousLoadFinished() throws AnalysisException {
