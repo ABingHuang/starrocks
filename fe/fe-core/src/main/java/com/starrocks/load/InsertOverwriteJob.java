@@ -78,7 +78,7 @@ public class InsertOverwriteJob implements Writable, GsonPostProcessable {
     @SerializedName(value = "targetTableName")
     private String targetTableName;
 
-    @SerializedName(value = "targetTableId")
+    @SerializedName(value = "targetPartitionIds")
     private Set<Long> targetPartitionIds;
 
     private long watershedTxnId = -1;
