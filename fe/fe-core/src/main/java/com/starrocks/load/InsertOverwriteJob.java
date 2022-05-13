@@ -282,9 +282,6 @@ public class InsertOverwriteJob implements Writable {
         LOG.info("start to execute insert");
         insertStmt.setOverwrite(false);
         try {
-            LOG.info("start to sleep in executeInsert");
-            Thread.sleep(20000);
-            LOG.info("finish sleep in executeInsert");
             StmtExecutor stmtExecutor = new StmtExecutor(context, insertStmt);
             stmtExecutor.execute();
             LOG.info("execute insert finished");
@@ -408,6 +405,9 @@ public class InsertOverwriteJob implements Writable {
         // try 3 times, or failed
         for (int i = 0; i < 3; i++) {
             try {
+                LOG.info("start to sleep in commit");
+                Thread.sleep(20000);
+                LOG.info("finish sleep in commit");
                 boolean ret = doCommit();
                 if (ret) {
                     transferTo(OverwriteJobState.SUCCESS);
