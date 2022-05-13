@@ -219,14 +219,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
                     for (InsertOverwriteJob job : runningJobs) {
                         LOG.info("start to gc insert overwrite job:{}", job.getJobId());
                         try {
-                            if (job.getJobState() == InsertOverwriteJob.OverwriteJobState.COMMITTING) {
-                                // if the state is COMMITTING, then it means the creation of temp partitions
-                                // and the insert are successful. So treat this state as success.
-                                // just recommit the insert overwrite
-                                job.handle();
-                            } else {
-                                job.cancel();
-                            }
+                            job.cancel();
                         } finally {
                             deregisterOverwriteJob(job.getJobId());
                         }
