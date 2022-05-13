@@ -172,15 +172,6 @@ public class InsertOverwriteJob implements Writable {
         return true;
     }
 
-    /*
-    @Override
-    public void gsonPostProcess() throws IOException {
-        this.context = new ConnectContext();
-        this.cv = new Object();
-    }
-
-     */
-
     public OverwriteJobState run() {
         handle();
         return jobState.get();
@@ -200,8 +191,6 @@ public class InsertOverwriteJob implements Writable {
                 jobState.set(OverwriteJobState.PREPARED);
                 break;
             case LOADING:
-                // 这里依赖于事务的完成
-                // 这里先做成重试的逻辑，后续可以考虑优化成重试导入
                 jobState.set(OverwriteJobState.LOADING);
                 break;
             case COMMITTING:
