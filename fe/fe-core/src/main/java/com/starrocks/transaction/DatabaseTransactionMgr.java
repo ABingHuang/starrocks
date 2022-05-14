@@ -478,6 +478,7 @@ public class DatabaseTransactionMgr {
             boolean hasRunningJobs =
                     Catalog.getCurrentCatalog().getInsertOverwriteJobManager().hasRunningOverwriteJob(
                             tableId, tableToPartition.get(tableId));
+            LOG.info("hasRunningJobs:{}, txnId:{}", hasRunningJobs, transactionId);
             if (hasRunningJobs) {
                 throw new TransactionCommitFailedException("There are running insert" +
                         " overwrite jobs for the target table and partitions");

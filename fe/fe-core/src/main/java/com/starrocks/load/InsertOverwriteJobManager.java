@@ -64,7 +64,10 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
 
     public boolean submitJob(InsertOverwriteJob job) {
         try {
-            registerOverwriteJob(job);
+            boolean registered = registerOverwriteJob(job);
+            if (!registered) {
+                throw new RuntimeException("register insert overwrite job failed");
+            }
             InsertOverwriteJob.OverwriteJobState state = job.run();
             return state == InsertOverwriteJob.OverwriteJobState.SUCCESS;
         } finally {
@@ -75,32 +78,23 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
     public boolean registerOverwriteJob(InsertOverwriteJob job) {
         lock.writeLock().lock();
         try {
+            LOG.info("start to register job:{}", job.getJobId());
             if (overwriteJobMap.containsKey(job.getJobId())) {
+                LOG.warn("job:{} is running", job.getJobId());
                 return false;
             }
             // check whether there is a overwrite job running in partitions
             if (hasRunningOverwriteJob(job.getTargetTableId(), job.getTargetPartitionIds())) {
+                LOG.warn("table:{} has running overwrite jobs", job.getTargetTableId());
                 return false;
             }
-            // 需要区分分区表和非分区表
-            /*
-            if (partitionsWithOverwrite.containsKey(job.getTargetTableId())) {
-                Set<Long> partitionsWithJob = partitionsWithOverwrite.get(job.getTargetTableId());
-                if (partitionsWithJob == null) {
-                    // it means the table has running insert overwrite job
-                    return false;
-                }
-                List<Long> partitionsToAdd = job.getTargetPartitionIds();
-                if (partitionsToAdd.stream().anyMatch(id -> partitionsWithJob.contains(id))) {
-                    LOG.warn("table:{} has already running insert overwrite job.", job.getTargetTableName());
-                    return false;
-                }
-            }
-
-             */
             overwriteJobMap.put(job.getJobId(), job);
-            Set<Long> partitions = partitionsWithOverwrite.getOrDefault(job.getTargetTableId(), Sets.newHashSet());
-            partitions.addAll(job.getTargetPartitionIds());
+            if (job.getTargetPartitionIds() != null) {
+                Set<Long> partitions = partitionsWithOverwrite.getOrDefault(job.getTargetTableId(), Sets.newHashSet());
+                partitions.addAll(job.getTargetPartitionIds());
+            } else {
+                LOG.info("job:{} target partition ids is null", job.getJobId());
+            }
             return true;
         } catch (Exception  e) {
             LOG.warn("register overwrite job failed", e);
