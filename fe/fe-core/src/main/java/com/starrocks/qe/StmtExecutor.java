@@ -1030,11 +1030,11 @@ public class StmtExecutor {
             if (db == null) {
                 throw new RuntimeException("db " + insertStmt.getDb() + " do not exist.");
             }
+            OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
             Set<Long> targetPartitionSet = insertStmt.getTargetPartitionIds().stream().collect(Collectors.toSet());
             InsertOverwriteJob insertOverwriteJob =
-                    new InsertOverwriteJob(context, Catalog.getCurrentCatalog().getNextId(), insertStmt,
-                            db.getId(), insertStmt.getTargetTable().getId(),
-                            insertStmt.getTargetTable().getName(), targetPartitionSet);
+                    new InsertOverwriteJob(context, Catalog.getCurrentCatalog().getNextId(),
+                            insertStmt, db, olapTable, targetPartitionSet);
             // add edit log
             CreateInsertOverwriteJobInfo info = new CreateInsertOverwriteJobInfo(insertOverwriteJob.getJobId(),
                     insertOverwriteJob.getTargetDbId(), insertOverwriteJob.getTargetTableId(),

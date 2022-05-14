@@ -6933,7 +6933,7 @@ public class Catalog {
     // create new partitions from source partitions.
     // new partitions have the same indexes as source partitions.
     public List<Partition> createTempPartitionsFromPartitions(Database db, OlapTable olapTable,
-                                                              String namePostfix, List<Long> sourcePartitionIds) {
+                                                              String namePostfix, Set<Long> sourcePartitionIds) {
         OlapTable copiedTbl;
         Map<String, Long> origPartitions = Maps.newHashMap();
         db.readLock();
