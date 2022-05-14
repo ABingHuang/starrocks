@@ -283,52 +283,58 @@ public class InsertOverwriteJob {
             }
         } catch (Throwable t) {
             LOG.warn("insert overwrite job:{} failed", jobId, t);
+            transferTo(OverwriteJobState.FAILED);
         }
     }
 
     private void createTempPartitions() {
-        List<Partition> newTempPartitions = Catalog.getCurrentCatalog().createTempPartitionsFromPartitions(
-                db, targetTable, postfix, targetPartitionIds);
-        LOG.info("postfix:{}, sourcePartitionNames:{}, newPartitionNames:{}, newTempPartitions size:{}",
-                postfix, Strings.join(sourcePartitionNames, ","), Strings.join(newPartitionNames, ","),
-                newTempPartitions.size());
-        db.writeLock();
         try {
-            List<Partition> sourcePartitions = insertStmt.getTargetPartitionIds().stream()
-                    .map(id -> targetTable.getPartition(id)).collect(Collectors.toList());
-            PartitionInfo partitionInfo = targetTable.getPartitionInfo();
-            List<PartitionPersistInfo> partitionInfoList = Lists.newArrayListWithCapacity(newTempPartitions.size());
-            for (int i = 0; i < newTempPartitions.size(); i++) {
-                targetTable.addTempPartition(newTempPartitions.get(i));
-                long sourcePartitionId = sourcePartitions.get(i).getId();
-                partitionInfo.addPartition(newTempPartitions.get(i).getId(),
-                        partitionInfo.getDataProperty(sourcePartitionId),
-                        partitionInfo.getReplicationNum(sourcePartitionId),
-                        partitionInfo.getIsInMemory(sourcePartitionId));
-                Partition partition = newTempPartitions.get(i);
-                // range is null for UNPARTITIONED type
-                Range<PartitionKey> range = null;
-                if (partitionInfo.getType() == PartitionType.RANGE) {
-                    RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                    rangePartitionInfo.setRange(partition.getId(), true,
-                            rangePartitionInfo.getRange(sourcePartitionId));
-                    range = rangePartitionInfo.getRange(partition.getId());
+            List<Partition> newTempPartitions = Catalog.getCurrentCatalog().createTempPartitionsFromPartitions(
+                    db, targetTable, postfix, targetPartitionIds);
+            LOG.info("postfix:{}, sourcePartitionNames:{}, newPartitionNames:{}, newTempPartitions size:{}",
+                    postfix, Strings.join(sourcePartitionNames, ","), Strings.join(newPartitionNames, ","),
+                    newTempPartitions.size());
+            db.writeLock();
+            try {
+                List<Partition> sourcePartitions = insertStmt.getTargetPartitionIds().stream()
+                        .map(id -> targetTable.getPartition(id)).collect(Collectors.toList());
+                PartitionInfo partitionInfo = targetTable.getPartitionInfo();
+                List<PartitionPersistInfo> partitionInfoList = Lists.newArrayListWithCapacity(newTempPartitions.size());
+                for (int i = 0; i < newTempPartitions.size(); i++) {
+                    targetTable.addTempPartition(newTempPartitions.get(i));
+                    long sourcePartitionId = sourcePartitions.get(i).getId();
+                    partitionInfo.addPartition(newTempPartitions.get(i).getId(),
+                            partitionInfo.getDataProperty(sourcePartitionId),
+                            partitionInfo.getReplicationNum(sourcePartitionId),
+                            partitionInfo.getIsInMemory(sourcePartitionId));
+                    Partition partition = newTempPartitions.get(i);
+                    // range is null for UNPARTITIONED type
+                    Range<PartitionKey> range = null;
+                    if (partitionInfo.getType() == PartitionType.RANGE) {
+                        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                        rangePartitionInfo.setRange(partition.getId(), true,
+                                rangePartitionInfo.getRange(sourcePartitionId));
+                        range = rangePartitionInfo.getRange(partition.getId());
+                    }
+                    PartitionPersistInfo info =
+                            new PartitionPersistInfo(db.getId(), targetTable.getId(), partition,
+                                    range,
+                                    partitionInfo.getDataProperty(partition.getId()),
+                                    partitionInfo.getReplicationNum(partition.getId()),
+                                    partitionInfo.getIsInMemory(partition.getId()),
+                                    true);
+                    partitionInfoList.add(info);
                 }
-                PartitionPersistInfo info =
-                        new PartitionPersistInfo(db.getId(), targetTable.getId(), partition,
-                                range,
-                                partitionInfo.getDataProperty(partition.getId()),
-                                partitionInfo.getReplicationNum(partition.getId()),
-                                partitionInfo.getIsInMemory(partition.getId()),
-                                true);
-                partitionInfoList.add(info);
+                AddPartitionsInfo infos = new AddPartitionsInfo(partitionInfoList);
+                LOG.info("add AddPartitionsInfo log");
+                Catalog.getCurrentCatalog().getEditLog().logAddPartitions(infos);
+                LOG.info("create temp partition finished");
+            } finally {
+                db.writeUnlock();
             }
-            AddPartitionsInfo infos = new AddPartitionsInfo(partitionInfoList);
-            LOG.info("add AddPartitionsInfo log");
-            Catalog.getCurrentCatalog().getEditLog().logAddPartitions(infos);
-            LOG.info("create temp partition finished");
-        } finally {
-            db.writeUnlock();
+        } catch (Throwable t) {
+            LOG.warn("create temp partitions failed", t);
+            transferTo(OverwriteJobState.FAILED);
         }
     }
 
