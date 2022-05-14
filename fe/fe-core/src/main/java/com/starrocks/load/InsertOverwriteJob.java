@@ -76,11 +76,8 @@ public class InsertOverwriteJob implements Writable {
     private Set<Long> targetPartitionIds;
 
     private long watershedTxnId = -1;
-    // isOverwrite is false, changed to insert into
     private InsertStmt insertStmt;
     private ConnectContext context;
-    // used to cancel job
-    private Object cv;
 
     private boolean isCancelled = false;
 
@@ -99,15 +96,12 @@ public class InsertOverwriteJob implements Writable {
 
     // used to replay InsertOverwriteJob
     public InsertOverwriteJob(long jobId, long dbId, long targetTableId, String targetTableName, Set<Long> targetPartitionIds) {
-        // this.context = new ConnectContext();
-        // context.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         this.jobId = jobId;
         this.jobState = new AtomicReference<>(OverwriteJobState.PENDING);
         this.dbId = dbId;
         this.targetTableId = targetTableId;
         this.targetTableName = targetTableName;
         this.targetPartitionIds = targetPartitionIds;
-        this.cv = new Object();
     }
 
     @Override
@@ -156,14 +150,9 @@ public class InsertOverwriteJob implements Writable {
                 || jobState.get() == OverwriteJobState.CANCELLED;
     }
 
+    // only called from log replay
     public boolean cancel() {
         try {
-            isCancelled = true;
-            if (cv != null) {
-                synchronized (cv) {
-                    cv.notifyAll();
-                }
-            }
             transferTo(OverwriteJobState.CANCELLED);
         } catch (Exception e) {
             LOG.warn("cancel insert overwrite job:{} failed", jobId, e);
@@ -177,8 +166,35 @@ public class InsertOverwriteJob implements Writable {
         return jobState.get();
     }
 
+    public void handle() {
+        switch (jobState.get()) {
+            case PENDING:
+                prepare();
+                break;
+            case PREPARED:
+                startLoad();
+                break;
+            case LOADING:
+                executeInsert();
+                break;
+            case COMMITTING:
+                commit();
+                LOG.info("insert overwrite job:{} commit success", jobId);
+                break;
+            case FAILED:
+            case CANCELLED:
+                gc();
+                break;
+            case SUCCESS:
+                LOG.info("insert overwrite job:{} succeed", jobId);
+                break;
+            default:
+                throw new RuntimeException("invalid jobState:" + jobState);
+        }
+    }
+
     public void replayStateChange(InsertOverwriteStateChangeInfo info) {
-        LOG.info("replay state change");
+        LOG.info("replay state change:{}", info);
         if (info.getFromState() != jobState.get()) {
             LOG.warn("invalid job info. current state:{}, from state:{}", jobState, info.getFromState());
             return;
@@ -213,33 +229,6 @@ public class InsertOverwriteJob implements Writable {
                 break;
             default:
                 LOG.warn("invalid state:{} for insert overwrite job:{}", jobState, jobId);
-        }
-    }
-
-    public void handle() {
-        switch (jobState.get()) {
-            case PENDING:
-                prepare();
-                break;
-            case PREPARED:
-                startLoad();
-                break;
-            case LOADING:
-                executeInsert();
-                break;
-            case COMMITTING:
-                commit();
-                LOG.info("insert overwrite job:{} commit success", jobId);
-                break;
-            case FAILED:
-            case CANCELLED:
-                gc();
-                break;
-            case SUCCESS:
-                LOG.info("insert overwrite job:{} succeed", jobId);
-                break;
-            default:
-                throw new RuntimeException("invalid jobState:" + jobState);
         }
     }
 
@@ -462,13 +451,11 @@ public class InsertOverwriteJob implements Writable {
             }
 
             LOG.info("start to wait previous load finish. watershedTxnId:{}", watershedTxnId);
-            while (!isCancelled && !isPreviousLoadFinished()) {
-                synchronized (cv) {
-                    cv.wait(1000);
-                }
+            while (!isPreviousLoadFinished() && !context.isKilled()) {
+                Thread.sleep(500);
             }
-            LOG.info("wait finished. isCancelled:{}, isPreviousLoadFinished:{}",
-                    isCancelled, isPreviousLoadFinished());
+            LOG.info("wait finished. isPreviousLoadFinished:{}, context.isKilled:{}",
+                    isPreviousLoadFinished(), context.isKilled());
             transferTo(OverwriteJobState.LOADING);
         } catch (Exception e) {
             LOG.warn("insert overwrite job:{} failed in loading.", jobId, e);
