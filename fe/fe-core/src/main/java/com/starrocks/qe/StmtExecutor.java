@@ -1030,6 +1030,11 @@ public class StmtExecutor {
             if (db == null) {
                 throw new RuntimeException("db " + insertStmt.getDb() + " do not exist.");
             }
+            Table table = insertStmt.getTargetTable();
+            if (!(table instanceof OlapTable)) {
+                LOG.info("insert overwrite table:{} type:{} is not supported", table.getName(), table.getClass());
+                throw new RuntimeException("not supported table type for insert overwrite");
+            }
             OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
             Set<Long> targetPartitionSet = insertStmt.getTargetPartitionIds().stream().collect(Collectors.toSet());
             InsertOverwriteJob insertOverwriteJob =

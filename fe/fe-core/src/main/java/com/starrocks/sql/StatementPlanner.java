@@ -71,6 +71,7 @@ public class StatementPlanner {
                 unLock(dbs);
             }
         } else if (stmt instanceof DmlStmt) {
+            /*
             if (stmt instanceof InsertStmt) {
                 InsertStmt insertStmt = (InsertStmt) stmt;
                 if (insertStmt.isOverwrite()) {
@@ -78,6 +79,8 @@ public class StatementPlanner {
                     return null;
                 }
             }
+
+             */
             Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
             try {
                 lock(dbs);
