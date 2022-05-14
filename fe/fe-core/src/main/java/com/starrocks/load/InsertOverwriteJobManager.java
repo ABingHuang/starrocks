@@ -89,12 +89,14 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
                 return false;
             }
             overwriteJobMap.put(job.getJobId(), job);
+            Set<Long> runningPartitions = partitionsWithOverwrite.getOrDefault(job.getTargetTableId(), Sets.newHashSet());
             if (job.getTargetPartitionIds() != null) {
-                Set<Long> partitions = partitionsWithOverwrite.getOrDefault(job.getTargetTableId(), Sets.newHashSet());
-                partitions.addAll(job.getTargetPartitionIds());
+                runningPartitions.addAll(job.getTargetPartitionIds());
             } else {
                 LOG.info("job:{} target partition ids is null", job.getJobId());
             }
+            partitionsWithOverwrite.put(job.getTargetTableId(), runningPartitions);
+            LOG.info("register overwrite job:{} success", job.getJobId());
             return true;
         } catch (Exception  e) {
             LOG.warn("register overwrite job failed", e);
@@ -152,7 +154,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
                 return true;
             }
             Set<Long> runningPartitions = partitionsWithOverwrite.get(tableId);
-            if (runningPartitions == null) {
+            if (runningPartitions == null || runningPartitions.isEmpty()) {
                 return true;
             }
             if (partitions.stream().anyMatch(pId -> runningPartitions.contains(pId))) {
