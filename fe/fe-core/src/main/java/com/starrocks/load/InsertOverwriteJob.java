@@ -272,7 +272,7 @@ public class InsertOverwriteJob {
         LOG.info("start to execute insert");
         try {
             // first change insert overwrite to insert into
-            insertStmt.setOverwrite(false);
+            // insertStmt.setOverwrite(false);
             // StmtExecutor stmtExecutor = new StmtExecutor(context, insertStmt);
             stmtExecutor.handleDMLStmt(execPlan, insertStmt);
             LOG.info("execute insert finished");

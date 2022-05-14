@@ -127,6 +127,7 @@ public class InsertStmt extends DmlStmt {
 
     private List<Column> targetColumns = Lists.newArrayList();
     private boolean isOverwrite;
+    private long overwriteJobId;
 
     /*
      * InsertStmt may be analyzed twice, but transaction must be only begun once.
@@ -205,6 +206,14 @@ public class InsertStmt extends DmlStmt {
 
     public void setOverwrite(boolean overwrite) {
         isOverwrite = overwrite;
+    }
+
+    public long getOverwriteJobId() {
+        return overwriteJobId;
+    }
+
+    public void setOverwriteJobId(long overwriteJobId) {
+        this.overwriteJobId = overwriteJobId;
     }
 
     // TODO(zc): used to get all dbs for lock

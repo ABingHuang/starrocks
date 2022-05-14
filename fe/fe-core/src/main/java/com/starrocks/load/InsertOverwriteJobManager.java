@@ -42,6 +42,8 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
 
     private List<InsertOverwriteJob> runningJobs;
 
+    private Map<Long, Long> jobToTxnId;
+
     private ReentrantReadWriteLock lock;
 
     public InsertOverwriteJobManager() {
@@ -75,6 +77,16 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
         }
     }
 
+    public void registerOverwriteJobTxn(long jobId, long txnId) {
+        lock.writeLock().lock();
+        try {
+            LOG.info("overwrite jobId:{} register txnId:{}", jobId, txnId);
+            jobToTxnId.put(jobId, txnId);
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
     public boolean registerOverwriteJob(InsertOverwriteJob job) {
         lock.writeLock().lock();
         try {
@@ -84,7 +96,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
                 return false;
             }
             // check whether there is a overwrite job running in partitions
-            if (hasRunningOverwriteJob(job.getTargetTableId(), job.getTargetPartitionIds())) {
+            if (hasRunningOverwriteJob(-1, job.getTargetTableId(), job.getTargetPartitionIds())) {
                 LOG.warn("table:{} has running overwrite jobs", job.getTargetTableId());
                 return false;
             }
@@ -114,6 +126,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
                 return true;
             }
             InsertOverwriteJob job = overwriteJobMap.get(jobid);
+            jobToTxnId.remove(jobid);
             Set<Long> partitionIds = partitionsWithOverwrite.get(job.getTargetTableId());
             LOG.info("deregister partitions:{}", partitionIds);
             if (partitionIds != null) {
@@ -133,18 +146,28 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
         }
     }
 
-    public boolean hasRunningOverwriteJob(Long tableId) {
+    public boolean hasRunningOverwriteJob(long txnId, long tableId) {
         lock.readLock().lock();
         try {
+            if (jobToTxnId.values().contains(txnId)) {
+                // overwrite job txn will return false
+                LOG.info("txnId:{} is overwrite job for table:{}, return false", txnId, tableId);
+                return false;
+            }
             return partitionsWithOverwrite.containsKey(tableId);
         } finally {
             lock.readLock().unlock();
         }
     }
 
-    public boolean hasRunningOverwriteJob(Long tableId, Set<Long> partitions) {
+    public boolean hasRunningOverwriteJob(long txnId, long tableId, Set<Long> partitions) {
         lock.readLock().lock();
         try {
+            if (jobToTxnId.values().contains(txnId)) {
+                // overwrite job txn will return false
+                LOG.info("txnId:{} is overwrite job for table:{}, return false", txnId, tableId);
+                return false;
+            }
             boolean tableExist = partitionsWithOverwrite.containsKey(tableId);
             if (!tableExist) {
                 return false;

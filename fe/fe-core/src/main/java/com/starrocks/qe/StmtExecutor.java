@@ -419,6 +419,42 @@ public class StmtExecutor {
                 }
             } else if (parsedStmt instanceof DmlStmt) {
                 try {
+                    if (parsedStmt instanceof InsertStmt && ((InsertStmt) parsedStmt).isOverwrite()) {
+                        LOG.info("start to handle insert overwrite job");
+                        InsertStmt insertStmt = (InsertStmt) parsedStmt;
+                        Database db = Catalog.getCurrentCatalog().getDb(insertStmt.getDb());
+                        if (db == null) {
+                            throw new RuntimeException("db " + insertStmt.getDb() + " do not exist.");
+                        }
+                        Table table = insertStmt.getTargetTable();
+                        if (!(table instanceof OlapTable)) {
+                            LOG.info("insert overwrite table:{} type:{} is not supported", table.getName(), table.getClass());
+                            throw new RuntimeException("not supported table type for insert overwrite");
+                        }
+                        OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
+                        Set<Long> targetPartitionSet = insertStmt.getTargetPartitionIds().stream().collect(Collectors.toSet());
+                        InsertOverwriteJob insertOverwriteJob =
+                                new InsertOverwriteJob(Catalog.getCurrentCatalog().getNextId(), context, this, execPlan,
+                                        insertStmt, db, olapTable, targetPartitionSet);
+                        insertStmt.setOverwriteJobId(insertOverwriteJob.getJobId());
+                        // add edit log
+                        CreateInsertOverwriteJobInfo info = new CreateInsertOverwriteJobInfo(insertOverwriteJob.getJobId(),
+                                insertOverwriteJob.getTargetDbId(), insertOverwriteJob.getTargetTableId(),
+                                insertOverwriteJob.getTargetTableName(), insertOverwriteJob.getTargetPartitionIds());
+                        LOG.info("create insert overwrite job info:{}", info);
+                        Catalog.getCurrentCatalog().getEditLog().logCreateInsertOverwrite(info);
+                        InsertOverwriteJobManager manager = Catalog.getCurrentCatalog().getInsertOverwriteJobManager();
+
+                        Boolean isSuccess = manager.submitJob(insertOverwriteJob);
+                        if (isSuccess) {
+                            LOG.info("execute insert overwrite success");
+                        } else {
+                            // Fixme: modify the failed result
+                            LOG.info("execute insert overwrite failed");
+                            throw new RuntimeException("insert overwrite failed");
+                        }
+                        return;
+                    }
                     handleDMLStmt(execPlan, (DmlStmt) parsedStmt);
                     if (context.getSessionVariable().isReportSucc()) {
                         writeProfile(beginTimeInNanoSecond);
@@ -1023,43 +1059,6 @@ public class StmtExecutor {
             return;
         }
 
-        if (stmt instanceof InsertStmt && ((InsertStmt) stmt).isOverwrite()) {
-            LOG.info("start to handle insert overwrite job");
-            InsertStmt insertStmt = (InsertStmt) stmt;
-            Database db = Catalog.getCurrentCatalog().getDb(insertStmt.getDb());
-            if (db == null) {
-                throw new RuntimeException("db " + insertStmt.getDb() + " do not exist.");
-            }
-            Table table = insertStmt.getTargetTable();
-            if (!(table instanceof OlapTable)) {
-                LOG.info("insert overwrite table:{} type:{} is not supported", table.getName(), table.getClass());
-                throw new RuntimeException("not supported table type for insert overwrite");
-            }
-            OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
-            Set<Long> targetPartitionSet = insertStmt.getTargetPartitionIds().stream().collect(Collectors.toSet());
-            InsertOverwriteJob insertOverwriteJob =
-                    new InsertOverwriteJob(Catalog.getCurrentCatalog().getNextId(), context, this, execPlan,
-                            insertStmt, db, olapTable, targetPartitionSet);
-            // add edit log
-            CreateInsertOverwriteJobInfo info = new CreateInsertOverwriteJobInfo(insertOverwriteJob.getJobId(),
-                    insertOverwriteJob.getTargetDbId(), insertOverwriteJob.getTargetTableId(),
-                    insertOverwriteJob.getTargetTableName(), insertOverwriteJob.getTargetPartitionIds());
-            LOG.info("create insert overwrite job info:{}", info);
-            Catalog.getCurrentCatalog().getEditLog().logCreateInsertOverwrite(info);
-            InsertOverwriteJobManager manager = Catalog.getCurrentCatalog().getInsertOverwriteJobManager();
-
-            Boolean isSuccess = manager.submitJob(insertOverwriteJob);
-            if (isSuccess) {
-                LOG.info("execute insert overwrite success");
-            } else {
-                // Fixme: modify the failed result
-                LOG.info("execute insert overwrite failed");
-                throw new RuntimeException("insert overwrite failed");
-            }
-
-            return;
-        }
-
         MetaUtils.normalizationTableName(context, stmt.getTableName());
         Database database = MetaUtils.getStarRocks(context, stmt.getTableName());
         Table targetTable = MetaUtils.getStarRocksTable(context, stmt.getTableName());
@@ -1109,6 +1108,12 @@ public class StmtExecutor {
             }
             if (targetTable instanceof OlapTable) {
                 txnState.addTableIndexes((OlapTable) targetTable);
+                if (stmt instanceof InsertStmt && ((InsertStmt) stmt).isOverwrite()) {
+                    long jobId = ((InsertStmt) stmt).getOverwriteJobId();
+                    LOG.info("start to register overwrite job id:{}, txnId:{}", jobId, transactionId);
+                    Catalog.getCurrentCatalog().getInsertOverwriteJobManager()
+                            .registerOverwriteJobTxn(jobId, transactionId);
+                }
             }
         }
 
