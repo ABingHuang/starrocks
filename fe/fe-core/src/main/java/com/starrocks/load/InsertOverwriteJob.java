@@ -265,8 +265,9 @@ public class InsertOverwriteJob {
     private void executeInsert() {
         Preconditions.checkState(jobState.get() == OverwriteJobState.LOADING);
         LOG.info("start to execute insert");
-        insertStmt.setOverwrite(false);
         try {
+            // first change insert overwrite to insert into
+            insertStmt.setOverwrite(false);
             StmtExecutor stmtExecutor = new StmtExecutor(context, insertStmt);
             stmtExecutor.execute();
             LOG.info("execute insert finished");
@@ -275,7 +276,6 @@ public class InsertOverwriteJob {
                 transferTo(OverwriteJobState.FAILED);
                 return;
             }
-            // transferTo(OverwriteJobState.COMMITTING);
         } catch (Throwable t) {
             LOG.warn("insert overwrite job:{} failed", jobId, t);
         }
@@ -309,7 +309,6 @@ public class InsertOverwriteJob {
                             rangePartitionInfo.getRange(sourcePartitionId));
                     range = rangePartitionInfo.getRange(partition.getId());
                 }
-                // contruct PartitionPersistInfo
                 PartitionPersistInfo info =
                         new PartitionPersistInfo(db.getId(), targetTable.getId(), partition,
                                 range,
@@ -360,12 +359,8 @@ public class InsertOverwriteJob {
     }
 
     private void commit() {
-        // Preconditions.checkState(jobState.get() == OverwriteJobState.COMMITTING);
         LOG.info("start to commit insert overwrite job:{}", jobId);
         try {
-            LOG.info("start to sleep in commit");
-            Thread.sleep(20000);
-            LOG.info("finish sleep in commit");
             doCommit();
         } catch (Exception exp) {
             LOG.warn("commit failed. there maybe some serious errors");
@@ -374,18 +369,8 @@ public class InsertOverwriteJob {
     }
 
     private void doCommit() {
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
-        if (db == null) {
-            LOG.warn("db:{} does not exist", dbId);
-            throw new RuntimeException("db does not exist");
-        }
         db.writeLock();
         try {
-            OlapTable targetTable = (OlapTable) db.getTable(targetTableId);
-            if (targetTable == null) {
-                LOG.warn("tablet:{} tableId[{}] does not exist in db:{}", targetTableName, targetTableId, dbId);
-                throw new RuntimeException("table does not exist");
-            }
             if (targetTable.getPartitionInfo().getType() == PartitionType.RANGE) {
                 targetTable.replaceTempPartitions(sourcePartitionNames, newPartitionNames, true, false);
             } else {
@@ -411,20 +396,9 @@ public class InsertOverwriteJob {
         Preconditions.checkState(jobState.get() == OverwriteJobState.PREPARED);
         Preconditions.checkState(insertStmt != null);
         try {
-            // modify all the partitions in insertStmt
             LOG.info("start to load, jobId:{}", jobId);
-            Database db = Catalog.getCurrentCatalog().getDb(dbId);
-            if (db == null) {
-                LOG.warn("db:{} does not exist", dbId);
-                throw new RuntimeException("db does not exist");
-            }
             db.readLock();
             try {
-                OlapTable targetTable = (OlapTable) db.getTable(targetTableId);
-                if (targetTable == null) {
-                    LOG.warn("table:{} tableId[{}] does not exist in db:{}", targetTableName, targetTableId, dbId);
-                    throw new RuntimeException("table does not exist");
-                }
                 List<Long> newPartitionIds = newPartitionNames.stream()
                         .map(partitionName -> targetTable.getPartition(partitionName, true).getId())
                         .collect(Collectors.toList());
@@ -437,13 +411,13 @@ public class InsertOverwriteJob {
                 db.readUnlock();
             }
 
+            // wait the previous loads
             LOG.info("start to wait previous load finish. watershedTxnId:{}", watershedTxnId);
             while (!isPreviousLoadFinished() && !context.isKilled()) {
                 Thread.sleep(500);
             }
             LOG.info("wait finished. isPreviousLoadFinished:{}, context.isKilled:{}",
                     isPreviousLoadFinished(), context.isKilled());
-            // transferTo(OverwriteJobState.LOADING);
         } catch (Exception e) {
             LOG.warn("insert overwrite job:{} failed in loading.", jobId, e);
             transferTo(OverwriteJobState.FAILED);
