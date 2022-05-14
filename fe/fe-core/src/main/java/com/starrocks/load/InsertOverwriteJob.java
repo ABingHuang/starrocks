@@ -23,6 +23,7 @@ import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.sql.plan.ExecPlan;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
@@ -71,20 +72,24 @@ public class InsertOverwriteJob {
 
     private long watershedTxnId = -1;
     private InsertStmt insertStmt;
+    private ExecPlan execPlan;
+    private StmtExecutor stmtExecutor;
     private ConnectContext context;
     private Database db;
     private OlapTable targetTable;
     String postfix;
 
-    public InsertOverwriteJob(ConnectContext context, long jobId, InsertStmt insertStmt,
+    public InsertOverwriteJob(long jobId, ConnectContext context, StmtExecutor stmtExecutor, ExecPlan execPlan, InsertStmt insertStmt,
                               Database db, OlapTable targetTable, Set<Long> targetPartitionIds) {
-        this.context = context;
         this.jobId = jobId;
-        this.jobState = new AtomicReference<>(OverwriteJobState.PENDING);
+        this.context = context;
+        this.stmtExecutor = stmtExecutor;
+        this.execPlan = execPlan;
         this.insertStmt = insertStmt;
         this.db = db;
         this.targetTable = targetTable;
         this.targetPartitionIds = targetPartitionIds;
+        this.jobState = new AtomicReference<>(OverwriteJobState.PENDING);
         this.dbId = db.getId();
         this.targetTableId = targetTable.getId();
         this.targetTableName = targetTable.getName();
@@ -267,8 +272,8 @@ public class InsertOverwriteJob {
         try {
             // first change insert overwrite to insert into
             insertStmt.setOverwrite(false);
-            StmtExecutor stmtExecutor = new StmtExecutor(context, insertStmt);
-            stmtExecutor.execute();
+            // StmtExecutor stmtExecutor = new StmtExecutor(context, insertStmt);
+            stmtExecutor.handleDMLStmt(execPlan, insertStmt);
             LOG.info("execute insert finished");
             if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
                 LOG.warn("execute insert failed, jobId:{}", jobId);

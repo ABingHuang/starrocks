@@ -1033,7 +1033,7 @@ public class StmtExecutor {
             OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
             Set<Long> targetPartitionSet = insertStmt.getTargetPartitionIds().stream().collect(Collectors.toSet());
             InsertOverwriteJob insertOverwriteJob =
-                    new InsertOverwriteJob(context, Catalog.getCurrentCatalog().getNextId(),
+                    new InsertOverwriteJob(Catalog.getCurrentCatalog().getNextId(), context, this, execPlan,
                             insertStmt, db, olapTable, targetPartitionSet);
             // add edit log
             CreateInsertOverwriteJobInfo info = new CreateInsertOverwriteJobInfo(insertOverwriteJob.getJobId(),
