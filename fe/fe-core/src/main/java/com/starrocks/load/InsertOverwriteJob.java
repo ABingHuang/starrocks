@@ -181,12 +181,7 @@ public class InsertOverwriteJob {
                 prepare();
                 break;
             case PREPARED:
-                createTempPartitions();
-                startLoad();
-                executeInsert();
-                commit();
-                transferTo(OverwriteJobState.SUCCESS);
-                LOG.info("insert overwrite job:{} commit success", jobId);
+                doLoad();
                 break;
             case FAILED:
             case CANCELLED:
@@ -197,6 +192,20 @@ public class InsertOverwriteJob {
                 break;
             default:
                 throw new RuntimeException("invalid jobState:" + jobState);
+        }
+    }
+
+    private void doLoad() {
+        try {
+            createTempPartitions();
+            startLoad();
+            executeInsert();
+            commit();
+            transferTo(OverwriteJobState.SUCCESS);
+            LOG.info("insert overwrite job:{} commit success", jobId);
+        } catch (Throwable t) {
+            LOG.info("insert overwrite job:{} load failed", jobId, t);
+            transferTo(OverwriteJobState.FAILED);
         }
     }
 
@@ -213,15 +222,6 @@ public class InsertOverwriteJob {
                 newPartitionNames = info.getNewPartitionsName();
                 jobState.set(OverwriteJobState.PREPARED);
                 break;
-                /*
-            case LOADING:
-                jobState.set(OverwriteJobState.LOADING);
-                break;
-            case COMMITTING:
-                jobState.set(OverwriteJobState.COMMITTING);
-                break;
-
-                 */
             case FAILED:
                 jobState.set(OverwriteJobState.FAILED);
                 LOG.info("replay insert overwrite job:{} to FAILED", jobId);
@@ -374,8 +374,8 @@ public class InsertOverwriteJob {
         try {
             doCommit();
         } catch (Exception exp) {
-            LOG.warn("commit failed. there maybe some serious errors");
-            transferTo(OverwriteJobState.FAILED);
+            LOG.warn("commit failed. there maybe some serious errors", exp);
+            throw exp;
         }
     }
 
