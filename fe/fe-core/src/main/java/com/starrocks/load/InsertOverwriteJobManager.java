@@ -53,6 +53,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
         this.cancelJobExecutorService = Executors.newSingleThreadExecutor(threadFactory);
         this.runningJobs = Lists.newArrayList();
         this.lock = new ReentrantReadWriteLock();
+        this.jobToTxnId = Maps.newHashMap();
     }
 
     public InsertOverwriteJob getOverwriteJob(long jobId) {
