@@ -232,7 +232,7 @@ public class InsertOverwriteJob {
                 LOG.info("replay insert overwrite job:{} to SUCCESS", jobId);
                 break;
             default:
-                LOG.warn("invalid state:{} for insert overwrite job:{}", jobState, jobId);
+                LOG.warn("invalid to state:{} for insert overwrite job:{}", info.getToState(), jobId);
         }
     }
 
@@ -263,7 +263,6 @@ public class InsertOverwriteJob {
     }
 
     private void executeInsert() {
-        Preconditions.checkState(jobState.get() == OverwriteJobState.LOADING);
         LOG.info("start to execute insert");
         try {
             // first change insert overwrite to insert into

@@ -1043,16 +1043,13 @@ public class StmtExecutor {
             Catalog.getCurrentCatalog().getEditLog().logCreateInsertOverwrite(info);
             InsertOverwriteJobManager manager = Catalog.getCurrentCatalog().getInsertOverwriteJobManager();
 
-            /*
-            Future<Boolean> future = manager.submitJob(insertOverwriteJob);
-            Boolean isSuccess = future.get();
-             */
             Boolean isSuccess = manager.submitJob(insertOverwriteJob);
             if (isSuccess) {
                 LOG.info("execute insert overwrite success");
             } else {
                 // Fixme: modify the failed result
                 LOG.info("execute insert overwrite failed");
+                throw new RuntimeException("insert overwrite failed");
             }
 
             return;
