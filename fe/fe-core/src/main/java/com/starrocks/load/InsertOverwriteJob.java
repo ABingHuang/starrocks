@@ -79,8 +79,9 @@ public class InsertOverwriteJob {
     private OlapTable targetTable;
     String postfix;
 
-    public InsertOverwriteJob(long jobId, ConnectContext context, StmtExecutor stmtExecutor, ExecPlan execPlan, InsertStmt insertStmt,
-                              Database db, OlapTable targetTable, Set<Long> targetPartitionIds) {
+    public InsertOverwriteJob(long jobId, ConnectContext context, StmtExecutor stmtExecutor,
+                              ExecPlan execPlan, InsertStmt insertStmt, Database db,
+                              OlapTable targetTable, Set<Long> targetPartitionIds) {
         this.jobId = jobId;
         this.context = context;
         this.stmtExecutor = stmtExecutor;
