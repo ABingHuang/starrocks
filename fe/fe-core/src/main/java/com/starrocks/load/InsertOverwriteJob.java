@@ -23,6 +23,7 @@ import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -274,7 +275,8 @@ public class InsertOverwriteJob {
             // first change insert overwrite to insert into
             // insertStmt.setOverwrite(false);
             // StmtExecutor stmtExecutor = new StmtExecutor(context, insertStmt);
-            stmtExecutor.handleDMLStmt(execPlan, insertStmt);
+            ExecPlan newPlan = new StatementPlanner().plan(insertStmt, context);
+            stmtExecutor.handleDMLStmt(newPlan, insertStmt);
             LOG.info("execute insert finished");
             if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
                 LOG.warn("execute insert failed, jobId:{}", jobId);
