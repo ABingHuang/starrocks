@@ -65,7 +65,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
         }
     }
 
-    public boolean submitJob(InsertOverwriteJob job) {
+    public boolean submitJob(InsertOverwriteJob job) throws Exception {
         try {
             boolean registered = registerOverwriteJob(job);
             if (!registered) {

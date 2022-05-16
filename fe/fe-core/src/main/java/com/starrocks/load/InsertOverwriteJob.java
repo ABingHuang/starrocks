@@ -169,12 +169,12 @@ public class InsertOverwriteJob {
         return true;
     }
 
-    public OverwriteJobState run() {
+    public OverwriteJobState run() throws Exception {
         handle();
         return jobState.get();
     }
 
-    public void handle() {
+    public void handle() throws Exception {
         switch (jobState.get()) {
             case PENDING:
                 prepare();
@@ -194,7 +194,7 @@ public class InsertOverwriteJob {
         }
     }
 
-    private void doLoad() {
+    private void doLoad() throws Exception {
         try {
             createTempPartitions();
             startLoad();
@@ -202,9 +202,10 @@ public class InsertOverwriteJob {
             commit();
             transferTo(OverwriteJobState.SUCCESS);
             LOG.info("insert overwrite job:{} commit success", jobId);
-        } catch (Throwable t) {
-            LOG.info("insert overwrite job:{} load failed", jobId, t);
+        } catch (Exception e) {
+            LOG.info("insert overwrite job:{} load failed", jobId, e);
             transferTo(OverwriteJobState.FAILED);
+            throw e;
         }
     }
 
@@ -264,10 +265,11 @@ public class InsertOverwriteJob {
         } catch (Exception e) {
             LOG.warn("prepare insert overwrite job:{} failed.", jobId, e);
             transferTo(OverwriteJobState.FAILED);
+            throw e;
         }
     }
 
-    private void executeInsert() {
+    private void executeInsert() throws Exception {
         LOG.info("start to execute insert");
         try {
             // first change insert overwrite to insert into
@@ -281,9 +283,9 @@ public class InsertOverwriteJob {
                 transferTo(OverwriteJobState.FAILED);
                 return;
             }
-        } catch (Throwable t) {
+        } catch (Exception t) {
             LOG.warn("insert overwrite job:{} failed", jobId, t);
-            transferTo(OverwriteJobState.FAILED);
+            throw t;
         }
     }
 
@@ -334,7 +336,7 @@ public class InsertOverwriteJob {
             }
         } catch (Throwable t) {
             LOG.warn("create temp partitions failed", t);
-            transferTo(OverwriteJobState.FAILED);
+            throw t;
         }
     }
 
@@ -403,7 +405,7 @@ public class InsertOverwriteJob {
                 .isPreviousTransactionsFinished(watershedTxnId, dbId, Lists.newArrayList(targetTableId));
     }
 
-    private void startLoad() {
+    private void startLoad() throws AnalysisException, InterruptedException {
         Preconditions.checkState(jobState.get() == OverwriteJobState.PREPARED);
         Preconditions.checkState(insertStmt != null);
         try {
@@ -431,7 +433,7 @@ public class InsertOverwriteJob {
                     isPreviousLoadFinished(), context.isKilled());
         } catch (Exception e) {
             LOG.warn("insert overwrite job:{} failed in loading.", jobId, e);
-            transferTo(OverwriteJobState.FAILED);
+            throw e;
         }
     }
 
