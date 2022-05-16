@@ -73,7 +73,6 @@ public class InsertOverwriteJob {
 
     private long watershedTxnId = -1;
     private InsertStmt insertStmt;
-    private ExecPlan execPlan;
     private StmtExecutor stmtExecutor;
     private ConnectContext context;
     private Database db;
@@ -81,12 +80,11 @@ public class InsertOverwriteJob {
     String postfix;
 
     public InsertOverwriteJob(long jobId, ConnectContext context, StmtExecutor stmtExecutor,
-                              ExecPlan execPlan, InsertStmt insertStmt, Database db,
+                              InsertStmt insertStmt, Database db,
                               OlapTable targetTable, Set<Long> targetPartitionIds) {
         this.jobId = jobId;
         this.context = context;
         this.stmtExecutor = stmtExecutor;
-        this.execPlan = execPlan;
         this.insertStmt = insertStmt;
         this.db = db;
         this.targetTable = targetTable;
