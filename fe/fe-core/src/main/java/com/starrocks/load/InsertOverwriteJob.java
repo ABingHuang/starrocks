@@ -172,6 +172,7 @@ public class InsertOverwriteJob {
                 gc();
                 break;
             case SUCCESS:
+                Preconditions.checkState(jobState.get() == OverwriteJobState.PREPARED);
                 LOG.info("insert overwrite job:{} succeed", jobId);
                 break;
             default:
@@ -184,7 +185,7 @@ public class InsertOverwriteJob {
             createTempPartitions();
             startLoad();
             executeInsert();
-            commit();
+            doCommit();
             transferTo(OverwriteJobState.SUCCESS);
             LOG.info("insert overwrite job:{} commit success", jobId);
         } catch (Exception e) {
@@ -256,21 +257,12 @@ public class InsertOverwriteJob {
 
     private void executeInsert() throws Exception {
         LOG.info("start to execute insert");
-        try {
-            // first change insert overwrite to insert into
-            // insertStmt.setOverwrite(false);
-            // StmtExecutor stmtExecutor = new StmtExecutor(context, insertStmt);
-            ExecPlan newPlan = new StatementPlanner().plan(insertStmt, context);
-            stmtExecutor.handleDMLStmt(newPlan, insertStmt);
-            LOG.info("execute insert finished");
-            if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-                LOG.warn("execute insert failed, jobId:{}", jobId);
-                transferTo(OverwriteJobState.FAILED);
-                return;
-            }
-        } catch (Exception t) {
-            LOG.warn("insert overwrite job:{} failed", jobId, t);
-            throw t;
+        ExecPlan newPlan = new StatementPlanner().plan(insertStmt, context);
+        stmtExecutor.handleDMLStmt(newPlan, insertStmt);
+        LOG.info("execute insert finished");
+        if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+            LOG.warn("execute insert failed, jobId:{}", jobId);
+            throw new RuntimeException("execute insert failed");
         }
     }
 
@@ -351,11 +343,14 @@ public class InsertOverwriteJob {
                     }
                 }
             }
+        } catch (Exception e) {
+            LOG.warn("exception when gc.", e);
         } finally {
             db.writeUnlock();
         }
     }
 
+    /*
     private void commit() {
         LOG.info("start to commit insert overwrite job:{}", jobId);
         try {
@@ -365,6 +360,8 @@ public class InsertOverwriteJob {
             throw exp;
         }
     }
+
+     */
 
     private void doCommit() {
         db.writeLock();
