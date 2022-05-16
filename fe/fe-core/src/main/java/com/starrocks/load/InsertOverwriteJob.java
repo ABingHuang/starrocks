@@ -109,21 +109,6 @@ public class InsertOverwriteJob {
         this.postfix = "_" + jobId;
     }
 
-    /*
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
-
-    public static InsertOverwriteJob read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        InsertOverwriteJob job = GsonUtils.GSON.fromJson(json, InsertOverwriteJob.class);
-        return job;
-    }
-
-     */
-
     public long getTargetDbId() {
         return dbId;
     }
@@ -242,7 +227,7 @@ public class InsertOverwriteJob {
         }
     }
 
-    private void transferTo(OverwriteJobState state) {
+    private void transferTo(OverwriteJobState state) throws Exception {
         InsertOverwriteStateChangeInfo info =
                 new InsertOverwriteStateChangeInfo(jobId, jobState.get(), state,
                         sourcePartitionNames, newPartitionNames);
@@ -252,7 +237,7 @@ public class InsertOverwriteJob {
         handle();
     }
 
-    private void prepare() {
+    private void prepare() throws Exception {
         Preconditions.checkState(jobState.get() == OverwriteJobState.PENDING);
         try {
             this.watershedTxnId =
@@ -405,7 +390,7 @@ public class InsertOverwriteJob {
                 .isPreviousTransactionsFinished(watershedTxnId, dbId, Lists.newArrayList(targetTableId));
     }
 
-    private void startLoad() throws AnalysisException, InterruptedException {
+    private void startLoad() throws Exception {
         Preconditions.checkState(jobState.get() == OverwriteJobState.PREPARED);
         Preconditions.checkState(insertStmt != null);
         try {
