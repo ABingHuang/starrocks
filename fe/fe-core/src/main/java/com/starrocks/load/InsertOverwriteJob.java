@@ -172,7 +172,6 @@ public class InsertOverwriteJob {
                 gc();
                 break;
             case SUCCESS:
-                Preconditions.checkState(jobState.get() == OverwriteJobState.PREPARED);
                 LOG.info("insert overwrite job:{} succeed", jobId);
                 break;
             default:
@@ -229,6 +228,9 @@ public class InsertOverwriteJob {
     }
 
     private void transferTo(OverwriteJobState state) throws Exception {
+        if (state == OverwriteJobState.SUCCESS) {
+            Preconditions.checkState(jobState.get() == OverwriteJobState.PREPARED);
+        }
         InsertOverwriteStateChangeInfo info =
                 new InsertOverwriteStateChangeInfo(jobId, jobState.get(), state,
                         sourcePartitionNames, newPartitionNames);
