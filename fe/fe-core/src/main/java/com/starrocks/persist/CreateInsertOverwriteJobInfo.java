@@ -41,40 +41,20 @@ public class CreateInsertOverwriteJobInfo implements Writable {
         return jobId;
     }
 
-    public void setJobId(long jobId) {
-        this.jobId = jobId;
-    }
-
     public long getDbId() {
         return dbId;
-    }
-
-    public void setDbId(long dbId) {
-        this.dbId = dbId;
     }
 
     public long getTableId() {
         return tableId;
     }
 
-    public void setTableId(long tableId) {
-        this.tableId = tableId;
-    }
-
     public String getTableName() {
         return tableName;
     }
 
-    public void setTableName(String tableName) {
-        this.tableName = tableName;
-    }
-
     public Set<Long> getTargetPartitionIds() {
         return targetPartitionIds;
-    }
-
-    public void setTargetPartitionIds(Set<Long> targetPartitionIds) {
-        this.targetPartitionIds = targetPartitionIds;
     }
 
     @Override
@@ -83,6 +63,7 @@ public class CreateInsertOverwriteJobInfo implements Writable {
                 "jobId=" + jobId +
                 ", dbId=" + dbId +
                 ", tableId=" + tableId +
+                ", tableName='" + tableName + '\'' +
                 ", targetPartitionIds=" + targetPartitionIds +
                 '}';
     }

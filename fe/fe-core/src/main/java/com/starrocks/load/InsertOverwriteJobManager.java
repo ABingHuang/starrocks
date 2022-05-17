@@ -49,8 +49,6 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
 
     private ReentrantReadWriteLock lock;
 
-
-
     public InsertOverwriteJobManager() {
         this.overwriteJobMap = Maps.newHashMap();
         this.partitionsWithOverwrite = Maps.newHashMap();
@@ -145,6 +143,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
             } else {
                 partitionsWithOverwrite.remove(job.getTargetTableId());
             }
+            overwriteJobMap.remove(jobid);
             jobNum--;
             return true;
         } catch (Exception e) {
@@ -252,7 +251,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
                             deregisterOverwriteJob(job.getJobId());
                         }
                     }
-                    runningJobs = null;
+                    runningJobs.clear();
                 }
             });
         }
@@ -260,6 +259,19 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
 
     public long getJobNum() {
         return jobNum;
+    }
+
+    public long getRunningJobSize() {
+        return runningJobs.size();
+    }
+
+    public InsertOverwriteJob getInsertOverwriteJob(long jobId) {
+        lock.readLock().lock();
+        try {
+            return overwriteJobMap.get(jobId);
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     @Override

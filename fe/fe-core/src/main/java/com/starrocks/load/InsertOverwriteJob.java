@@ -48,7 +48,6 @@ public class InsertOverwriteJob {
     }
     @SerializedName(value = "jobState")
     private OverwriteJobState jobState;
-    // private AtomicReference<OverwriteJobState> jobState;
 
     @SerializedName(value = "sourcePartitionNames")
     private List<String> sourcePartitionNames;
@@ -76,6 +75,10 @@ public class InsertOverwriteJob {
     private OlapTable targetTable;
     private String postfix;
 
+    private long createPartitionElapse;
+    private long waitInsertIntoElapse;
+    private long insertElapse;
+
     public InsertOverwriteJob(long jobId, ConnectContext context, StmtExecutor stmtExecutor,
                               InsertStmt insertStmt, Database db,
                               OlapTable targetTable, Set<Long> targetPartitionIds) {
@@ -91,10 +94,14 @@ public class InsertOverwriteJob {
         this.targetTableId = targetTable.getId();
         this.targetTableName = targetTable.getName();
         this.postfix = "_" + jobId;
+        this.createPartitionElapse = 0;
+        this.waitInsertIntoElapse = 0;
+        this.insertElapse = 0;
     }
 
     // used to replay InsertOverwriteJob
-    public InsertOverwriteJob(long jobId, long dbId, long targetTableId, String targetTableName, Set<Long> targetPartitionIds) {
+    public InsertOverwriteJob(long jobId, long dbId, long targetTableId,
+                              String targetTableName, Set<Long> targetPartitionIds) {
         this.jobId = jobId;
         this.jobState = OverwriteJobState.OVERWRITE_PENDING;
         this.dbId = dbId;
@@ -104,6 +111,9 @@ public class InsertOverwriteJob {
         this.db = GlobalStateMgr.getCurrentState().getDb(dbId);
         this.targetTable = (OlapTable) db.getTable(targetTableId);
         this.postfix = "_" + jobId;
+        this.createPartitionElapse = 0;
+        this.waitInsertIntoElapse = 0;
+        this.insertElapse = 0;
     }
 
     public long getTargetDbId() {
@@ -173,9 +183,14 @@ public class InsertOverwriteJob {
                 case OVERWRITE_FAILED:
                 case OVERWRITE_CANCELLED:
                     gc();
+                    LOG.warn("insert overwrite job:{} failed. createPartitionElapse:{}," +
+                                    " waitInsertIntoElapse:{}, insertElapse:{}",
+                            jobId, createPartitionElapse, waitInsertIntoElapse, insertElapse);
                     break;
                 case OVERWRITE_SUCCESS:
-                    LOG.info("insert overwrite job:{} succeed", jobId);
+                    LOG.info("insert overwrite job:{} succeed. createPartitionElapse:{}," +
+                            " waitInsertIntoElapse:{}, insertElapse:{}",
+                            jobId, createPartitionElapse, waitInsertIntoElapse, insertElapse);
                     break;
                 default:
                     throw new RuntimeException("invalid jobState:" + jobState);
@@ -267,8 +282,11 @@ public class InsertOverwriteJob {
 
     private void executeInsert() throws Exception {
         LOG.info("start to execute insert");
+        long insertStartTimestamp = System.currentTimeMillis();
+        // should replan here because prepareInsert has changed the targetPartitionNames of insertStmt
         ExecPlan newPlan = new StatementPlanner().plan(insertStmt, context);
         stmtExecutor.handleDMLStmt(newPlan, insertStmt);
+        insertElapse = System.currentTimeMillis() - insertStartTimestamp;
         LOG.info("execute insert finished");
         if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
             LOG.warn("execute insert failed, jobId:{}", jobId);
@@ -278,6 +296,7 @@ public class InsertOverwriteJob {
 
     private void createTempPartitions() {
         try {
+            long createPartitionStartTimestamp = System.currentTimeMillis();
             List<Partition> newTempPartitions = GlobalStateMgr.getCurrentState().createTempPartitionsFromPartitions(
                     db, targetTable, postfix, targetPartitionIds);
             LOG.info("postfix:{}, sourcePartitionNames:{}, newPartitionNames:{}, newTempPartitions size:{}",
@@ -315,10 +334,9 @@ public class InsertOverwriteJob {
                     partitionInfoList.add(info);
                 }
                 AddPartitionsInfo infos = new AddPartitionsInfo(partitionInfoList);
-                LOG.info("add AddPartitionsInfo log");
                 GlobalStateMgr.getCurrentState().getEditLog().logAddPartitions(infos);
-                LOG.info("create temp partition finished");
             } finally {
+                createPartitionElapse = System.currentTimeMillis() - createPartitionStartTimestamp;
                 db.writeUnlock();
             }
         } catch (Throwable t) {
@@ -329,18 +347,8 @@ public class InsertOverwriteJob {
 
     private void gc() {
         LOG.info("start to garbage collect");
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db == null) {
-            LOG.warn("db[{}] does not exist", dbId);
-            throw new RuntimeException("db does not exist");
-        }
         db.writeLock();
         try {
-            OlapTable targetTable = (OlapTable) db.getTable(targetTableId);
-            if (targetTable == null) {
-                LOG.warn("tablet:{} tableId[{}] does not exist in db:{}", targetTableName, targetTableId, dbId);
-                throw new RuntimeException("table does not exist");
-            }
             if (newPartitionNames != null) {
                 for (String partitionName : newPartitionNames) {
                     LOG.info("drop partition:{}", partitionName);
@@ -354,7 +362,7 @@ public class InsertOverwriteJob {
                 }
             }
         } catch (Exception e) {
-            LOG.warn("exception when gc.", e);
+            LOG.warn("exception when gc insert overwrite job.", e);
         } finally {
             db.writeUnlock();
         }
@@ -388,7 +396,7 @@ public class InsertOverwriteJob {
         Preconditions.checkState(jobState == OverwriteJobState.OVERWRITE_PREPARED);
         Preconditions.checkState(insertStmt != null);
         try {
-            LOG.info("start to load, jobId:{}", jobId);
+            LOG.info("start to insert, jobId:{}", jobId);
             db.readLock();
             try {
                 List<Long> newPartitionIds = newPartitionNames.stream()
@@ -405,9 +413,11 @@ public class InsertOverwriteJob {
 
             // wait the previous loads
             LOG.info("start to wait previous load finish. watershedTxnId:{}", watershedTxnId);
+            long waitInsertStartTimestamp = System.currentTimeMillis();
             while (!isPreviousLoadFinished() && !context.isKilled()) {
                 Thread.sleep(500);
             }
+            waitInsertIntoElapse = waitInsertStartTimestamp - waitInsertStartTimestamp;
             LOG.info("wait finished. isPreviousLoadFinished:{}, context.isKilled:{}",
                     isPreviousLoadFinished(), context.isKilled());
         } catch (Exception e) {
