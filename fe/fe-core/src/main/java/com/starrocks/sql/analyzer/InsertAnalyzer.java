@@ -41,7 +41,6 @@ public class InsertAnalyzer {
 
         if (insertStmt.isOverwrite()) {
             if (!(table instanceof OlapTable)) {
-                // TODO: add support for MaterializedView
                 throw unsupportedException("Only support insert overwrite olap table");
             }
         } else if (!(table instanceof OlapTable) && !(table instanceof MysqlTable)) {
@@ -88,7 +87,6 @@ public class InsertAnalyzer {
                 }
             }
         }
-        // TODO: add support to MaterializedView
 
         // Build target columns
         List<Column> targetColumns;

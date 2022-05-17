@@ -921,21 +921,6 @@ public class InsertStmt extends DmlStmt {
         this.targetColumns = targetColumns;
     }
 
-    @Override
-    public String toSql() {
-        StringBuilder stringBuilder = new StringBuilder();
-        stringBuilder.append("insert ");
-        if (isOverwrite) {
-            stringBuilder.append(" overwrite ");
-        } else {
-            stringBuilder.append(" into ");
-        }
-        stringBuilder.append(targetTable.getName());
-        stringBuilder.append(" ");
-        stringBuilder.append(queryStmt.toSql());
-        return stringBuilder.toString();
-    }
-
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitInsertStatement(this, context);
     }
