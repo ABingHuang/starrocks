@@ -77,7 +77,7 @@ public class InsertOverwriteJob {
     private ConnectContext context;
     private Database db;
     private OlapTable targetTable;
-    String postfix;
+    private String postfix;
 
     public InsertOverwriteJob(long jobId, ConnectContext context, StmtExecutor stmtExecutor,
                               InsertStmt insertStmt, Database db,
@@ -144,7 +144,12 @@ public class InsertOverwriteJob {
     }
 
     // only called from log replay
+    // there is no concurrent problem here
     public boolean cancel() {
+        if (isFinished()) {
+            LOG.warn("cancel failed. insert overwrite job:{} already finished. state:{}", jobState);
+            return false;
+        }
         try {
             transferTo(OverwriteJobState.CANCELLED);
         } catch (Exception e) {
@@ -160,36 +165,43 @@ public class InsertOverwriteJob {
     }
 
     public void handle() throws Exception {
-        switch (jobState.get()) {
-            case PENDING:
-                prepare();
-                break;
-            case PREPARED:
-                doLoad();
-                break;
-            case FAILED:
-            case CANCELLED:
-                gc();
-                break;
-            case SUCCESS:
-                LOG.info("insert overwrite job:{} succeed", jobId);
-                break;
-            default:
-                throw new RuntimeException("invalid jobState:" + jobState);
+        try {
+            switch (jobState.get()) {
+                case PENDING:
+                    prepare();
+                    break;
+                case PREPARED:
+                    doLoad();
+                    break;
+                case FAILED:
+                case CANCELLED:
+                    gc();
+                    break;
+                case SUCCESS:
+                    LOG.info("insert overwrite job:{} succeed", jobId);
+                    break;
+                default:
+                    throw new RuntimeException("invalid jobState:" + jobState);
+            }
+        } catch (Exception e) {
+            LOG.warn("insert overwrite job:{} handle exception", jobId, e);
+            if (jobState.get() != OverwriteJobState.FAILED && jobState.get() != OverwriteJobState.CANCELLED) {
+                transferTo(OverwriteJobState.FAILED);
+            }
+            throw e;
         }
     }
 
     private void doLoad() throws Exception {
+        Preconditions.checkState(jobState.get() == OverwriteJobState.PREPARED);
         try {
             createTempPartitions();
-            startLoad();
+            prepareInsert();
             executeInsert();
             doCommit();
             transferTo(OverwriteJobState.SUCCESS);
-            LOG.info("insert overwrite job:{} commit success", jobId);
         } catch (Exception e) {
             LOG.info("insert overwrite job:{} load failed", jobId, e);
-            transferTo(OverwriteJobState.FAILED);
             throw e;
         }
     }
@@ -227,6 +239,14 @@ public class InsertOverwriteJob {
         }
     }
 
+    /*
+    @Override
+    public void gsonPostProcess() throws IOException {
+        LOG.info("InsertOverwriteJob:{} gsonPostProcess called", jobId);
+    }
+
+     */
+
     private void transferTo(OverwriteJobState state) throws Exception {
         if (state == OverwriteJobState.SUCCESS) {
             Preconditions.checkState(jobState.get() == OverwriteJobState.PREPARED);
@@ -252,7 +272,6 @@ public class InsertOverwriteJob {
             transferTo(OverwriteJobState.PREPARED);
         } catch (Exception e) {
             LOG.warn("prepare insert overwrite job:{} failed.", jobId, e);
-            transferTo(OverwriteJobState.FAILED);
             throw e;
         }
     }
@@ -389,7 +408,7 @@ public class InsertOverwriteJob {
                 .isPreviousTransactionsFinished(watershedTxnId, dbId, Lists.newArrayList(targetTableId));
     }
 
-    private void startLoad() throws Exception {
+    private void prepareInsert() throws Exception {
         Preconditions.checkState(jobState.get() == OverwriteJobState.PREPARED);
         Preconditions.checkState(insertStmt != null);
         try {
@@ -419,22 +438,5 @@ public class InsertOverwriteJob {
             LOG.warn("insert overwrite job:{} failed in loading.", jobId, e);
             throw e;
         }
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        InsertOverwriteJob that = (InsertOverwriteJob) o;
-        return jobId == that.jobId;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(jobId);
     }
 }
