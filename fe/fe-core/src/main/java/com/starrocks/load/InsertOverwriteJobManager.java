@@ -72,7 +72,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
                 throw new RuntimeException("register insert overwrite job failed");
             }
             InsertOverwriteJob.OverwriteJobState state = job.run();
-            return state == InsertOverwriteJob.OverwriteJobState.SUCCESS;
+            return state == InsertOverwriteJob.OverwriteJobState.OVERWRITE_SUCCESS;
         } finally {
             deregisterOverwriteJob(job.getJobId());
         }
