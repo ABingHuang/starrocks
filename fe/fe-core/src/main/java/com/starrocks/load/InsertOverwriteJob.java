@@ -31,7 +31,6 @@ import org.apache.parquet.Strings;
 
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 public class InsertOverwriteJob {
@@ -48,7 +47,8 @@ public class InsertOverwriteJob {
         OVERWRITE_CANCELLED
     }
     @SerializedName(value = "jobState")
-    private AtomicReference<OverwriteJobState> jobState;
+    private OverwriteJobState jobState;
+    // private AtomicReference<OverwriteJobState> jobState;
 
     @SerializedName(value = "sourcePartitionNames")
     private List<String> sourcePartitionNames;
@@ -86,7 +86,7 @@ public class InsertOverwriteJob {
         this.db = db;
         this.targetTable = targetTable;
         this.targetPartitionIds = targetPartitionIds;
-        this.jobState = new AtomicReference<>(OverwriteJobState.OVERWRITE_PENDING);
+        this.jobState = OverwriteJobState.OVERWRITE_PENDING;
         this.dbId = db.getId();
         this.targetTableId = targetTable.getId();
         this.targetTableName = targetTable.getName();
@@ -96,7 +96,7 @@ public class InsertOverwriteJob {
     // used to replay InsertOverwriteJob
     public InsertOverwriteJob(long jobId, long dbId, long targetTableId, String targetTableName, Set<Long> targetPartitionIds) {
         this.jobId = jobId;
-        this.jobState = new AtomicReference<>(OverwriteJobState.OVERWRITE_PENDING);
+        this.jobState = OverwriteJobState.OVERWRITE_PENDING;
         this.dbId = dbId;
         this.targetTableId = targetTableId;
         this.targetTableName = targetTableName;
@@ -131,13 +131,13 @@ public class InsertOverwriteJob {
     }
 
     public OverwriteJobState getJobState() {
-        return jobState.get();
+        return jobState;
     }
 
     public boolean isFinished() {
-        return jobState.get() == OverwriteJobState.OVERWRITE_SUCCESS
-                || jobState.get() == OverwriteJobState.OVERWRITE_FAILED
-                || jobState.get() == OverwriteJobState.OVERWRITE_CANCELLED;
+        return jobState == OverwriteJobState.OVERWRITE_SUCCESS
+                || jobState == OverwriteJobState.OVERWRITE_FAILED
+                || jobState == OverwriteJobState.OVERWRITE_CANCELLED;
     }
 
     // only called from log replay
@@ -158,12 +158,12 @@ public class InsertOverwriteJob {
 
     public OverwriteJobState run() throws Exception {
         handle();
-        return jobState.get();
+        return jobState;
     }
 
     public void handle() throws Exception {
         try {
-            switch (jobState.get()) {
+            switch (jobState) {
                 case OVERWRITE_PENDING:
                     prepare();
                     break;
@@ -182,7 +182,7 @@ public class InsertOverwriteJob {
             }
         } catch (Exception e) {
             LOG.warn("insert overwrite job:{} handle exception", jobId, e);
-            if (jobState.get() != OverwriteJobState.OVERWRITE_FAILED && jobState.get() != OverwriteJobState.OVERWRITE_CANCELLED) {
+            if (jobState != OverwriteJobState.OVERWRITE_FAILED && jobState != OverwriteJobState.OVERWRITE_CANCELLED) {
                 transferTo(OverwriteJobState.OVERWRITE_FAILED);
             }
             throw e;
@@ -190,7 +190,7 @@ public class InsertOverwriteJob {
     }
 
     private void doLoad() throws Exception {
-        Preconditions.checkState(jobState.get() == OverwriteJobState.OVERWRITE_PREPARED);
+        Preconditions.checkState(jobState == OverwriteJobState.OVERWRITE_PREPARED);
         try {
             createTempPartitions();
             prepareInsert();
@@ -205,7 +205,7 @@ public class InsertOverwriteJob {
 
     public void replayStateChange(InsertOverwriteStateChangeInfo info) {
         LOG.info("replay state change:{}", info);
-        if (info.getFromState() != jobState.get()) {
+        if (info.getFromState() != jobState) {
             LOG.warn("invalid job info. current state:{}, from state:{}", jobState, info.getFromState());
             return;
         }
@@ -214,20 +214,20 @@ public class InsertOverwriteJob {
             case OVERWRITE_PREPARED:
                 sourcePartitionNames = info.getSourcePartitionNames();
                 newPartitionNames = info.getNewPartitionsName();
-                jobState.set(OverwriteJobState.OVERWRITE_PREPARED);
+                jobState = OverwriteJobState.OVERWRITE_PREPARED;
                 break;
             case OVERWRITE_FAILED:
-                jobState.set(OverwriteJobState.OVERWRITE_FAILED);
+                jobState = OverwriteJobState.OVERWRITE_FAILED;
                 LOG.info("replay insert overwrite job:{} to FAILED", jobId);
                 gc();
                 break;
             case OVERWRITE_CANCELLED:
-                jobState.set(OverwriteJobState.OVERWRITE_CANCELLED);
+                jobState = OverwriteJobState.OVERWRITE_CANCELLED;
                 LOG.info("replay insert overwrite job:{} to CANCELLED", jobId);
                 gc();
                 break;
             case OVERWRITE_SUCCESS:
-                jobState.set(OverwriteJobState.OVERWRITE_SUCCESS);
+                jobState = OverwriteJobState.OVERWRITE_SUCCESS;
                 doCommit();
                 LOG.info("replay insert overwrite job:{} to SUCCESS", jobId);
                 break;
@@ -236,29 +236,21 @@ public class InsertOverwriteJob {
         }
     }
 
-    /*
-    @Override
-    public void gsonPostProcess() throws IOException {
-        LOG.info("InsertOverwriteJob:{} gsonPostProcess called", jobId);
-    }
-
-     */
-
     private void transferTo(OverwriteJobState state) throws Exception {
         if (state == OverwriteJobState.OVERWRITE_SUCCESS) {
-            Preconditions.checkState(jobState.get() == OverwriteJobState.OVERWRITE_PREPARED);
+            Preconditions.checkState(jobState == OverwriteJobState.OVERWRITE_PREPARED);
         }
         InsertOverwriteStateChangeInfo info =
-                new InsertOverwriteStateChangeInfo(jobId, jobState.get(), state,
+                new InsertOverwriteStateChangeInfo(jobId, jobState, state,
                         sourcePartitionNames, newPartitionNames);
         LOG.info("InsertOverwriteStateChangeInfo:{}", info);
         GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
-        jobState.set(state);
+        jobState = state;
         handle();
     }
 
     private void prepare() throws Exception {
-        Preconditions.checkState(jobState.get() == OverwriteJobState.OVERWRITE_PENDING);
+        Preconditions.checkState(jobState == OverwriteJobState.OVERWRITE_PENDING);
         try {
             this.watershedTxnId =
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
@@ -368,19 +360,6 @@ public class InsertOverwriteJob {
         }
     }
 
-    /*
-    private void commit() {
-        LOG.info("start to commit insert overwrite job:{}", jobId);
-        try {
-            doCommit();
-        } catch (Exception exp) {
-            LOG.warn("commit failed. there maybe some serious errors", exp);
-            throw exp;
-        }
-    }
-
-     */
-
     private void doCommit() {
         db.writeLock();
         try {
@@ -406,7 +385,7 @@ public class InsertOverwriteJob {
     }
 
     private void prepareInsert() throws Exception {
-        Preconditions.checkState(jobState.get() == OverwriteJobState.OVERWRITE_PREPARED);
+        Preconditions.checkState(jobState == OverwriteJobState.OVERWRITE_PREPARED);
         Preconditions.checkState(insertStmt != null);
         try {
             LOG.info("start to load, jobId:{}", jobId);

@@ -38,6 +38,9 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
     @SerializedName(value = "partitionsWithOverwrite")
     private Map<Long, Set<Long>> partitionsWithOverwrite;
 
+    @SerializedName(value = "jobNum")
+    private long jobNum;
+
     private ExecutorService cancelJobExecutorService;
 
     private List<InsertOverwriteJob> runningJobs;
@@ -45,6 +48,8 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
     private Map<Long, Long> jobToTxnId;
 
     private ReentrantReadWriteLock lock;
+
+
 
     public InsertOverwriteJobManager() {
         this.overwriteJobMap = Maps.newHashMap();
@@ -54,6 +59,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
         this.runningJobs = Lists.newArrayList();
         this.lock = new ReentrantReadWriteLock();
         this.jobToTxnId = Maps.newHashMap();
+        this.jobNum = 0;
     }
 
     public InsertOverwriteJob getOverwriteJob(long jobId) {
@@ -110,6 +116,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
             }
             partitionsWithOverwrite.put(job.getTargetTableId(), runningPartitions);
             LOG.info("register overwrite job:{} success", job.getJobId());
+            jobNum++;
             return true;
         } catch (Exception  e) {
             LOG.warn("register overwrite job failed", e);
@@ -138,6 +145,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
             } else {
                 partitionsWithOverwrite.remove(job.getTargetTableId());
             }
+            jobNum--;
             return true;
         } catch (Exception e) {
             LOG.warn("deregister overwrite job failed", e);
@@ -248,6 +256,10 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
                 }
             });
         }
+    }
+
+    public long getJobNum() {
+        return jobNum;
     }
 
     @Override
