@@ -210,7 +210,6 @@ public class InsertOverwriteJob {
             doCommit();
             transferTo(OverwriteJobState.OVERWRITE_SUCCESS);
         } catch (Exception e) {
-            LOG.warn("insert overwrite job:{} load failed", jobId, e);
             throw new RuntimeException("doLoad failed.", e);
         }
     }
@@ -279,7 +278,7 @@ public class InsertOverwriteJob {
         stmtExecutor.handleDMLStmt(newPlan, insertStmt);
         insertElapse = System.currentTimeMillis() - insertStartTimestamp;
         if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-            LOG.warn("execute insert failed, jobId:{}", jobId);
+            LOG.warn("insert overwrite failed. error message:{}", context.getState().getErrorMessage());
             throw new RuntimeException("execute insert failed");
         }
     }
@@ -385,7 +384,7 @@ public class InsertOverwriteJob {
                 .isPreviousTransactionsFinished(watershedTxnId, dbId, Lists.newArrayList(targetTableId));
     }
 
-    private void prepareInsert() throws Exception {
+    private void prepareInsert() {
         Preconditions.checkState(jobState == OverwriteJobState.OVERWRITE_PREPARED);
         Preconditions.checkState(insertStmt != null);
         try {
@@ -411,7 +410,6 @@ public class InsertOverwriteJob {
                 throw new RuntimeException("insert overwrite context is killed");
             }
         } catch (Exception e) {
-            LOG.warn("insert overwrite job:{} failed in prepareInsert.", jobId, e);
             throw new RuntimeException("prepareInsert exception", e);
         }
     }
