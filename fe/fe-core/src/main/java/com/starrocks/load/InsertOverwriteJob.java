@@ -413,7 +413,7 @@ public class InsertOverwriteJob {
             }
         } catch (Exception e) {
             LOG.warn("insert overwrite job:{} failed in prepareInsert.", jobId, e);
-            throw e;
+            throw new RuntimeException("prepareInsert exception", e);
         }
     }
 }
