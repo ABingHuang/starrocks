@@ -69,14 +69,14 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
         }
     }
 
-    public boolean submitJob(InsertOverwriteJob job) throws Exception {
+    public void submitJob(InsertOverwriteJob job) throws Exception {
         try {
             boolean registered = registerOverwriteJob(job);
             if (!registered) {
+                LOG.warn("register insert overwrite job:{} failed", job.getJobId());
                 throw new RuntimeException("register insert overwrite job failed");
             }
-            InsertOverwriteJob.OverwriteJobState state = job.run();
-            return state == InsertOverwriteJob.OverwriteJobState.OVERWRITE_SUCCESS;
+            job.run();
         } finally {
             deregisterOverwriteJob(job.getJobId());
         }
@@ -85,7 +85,6 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
     public void registerOverwriteJobTxn(long jobId, long txnId) {
         lock.writeLock().lock();
         try {
-            LOG.info("overwrite jobId:{} register txnId:{}", jobId, txnId);
             jobToTxnId.put(jobId, txnId);
         } finally {
             lock.writeLock().unlock();
@@ -95,9 +94,8 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
     public boolean registerOverwriteJob(InsertOverwriteJob job) {
         lock.writeLock().lock();
         try {
-            LOG.info("start to register job:{}", job.getJobId());
             if (overwriteJobMap.containsKey(job.getJobId())) {
-                LOG.warn("job:{} is running", job.getJobId());
+                LOG.warn("insert overwrite job:{} is running", job.getJobId());
                 return false;
             }
             // check whether there is a overwrite job running in partitions
@@ -109,23 +107,16 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
             Set<Long> runningPartitions = partitionsWithOverwrite.getOrDefault(job.getTargetTableId(), Sets.newHashSet());
             if (job.getTargetPartitionIds() != null) {
                 runningPartitions.addAll(job.getTargetPartitionIds());
-            } else {
-                LOG.info("job:{} target partition ids is null", job.getJobId());
             }
             partitionsWithOverwrite.put(job.getTargetTableId(), runningPartitions);
-            LOG.info("register overwrite job:{} success", job.getJobId());
             jobNum++;
             return true;
-        } catch (Exception  e) {
-            LOG.warn("register overwrite job failed", e);
-            return false;
         } finally {
             lock.writeLock().unlock();
         }
     }
 
     public boolean deregisterOverwriteJob(long jobid) {
-        LOG.info("start to deregister overwrite job:{}", jobid);
         lock.writeLock().lock();
         try {
             if (!overwriteJobMap.containsKey(jobid)) {
@@ -134,7 +125,6 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
             InsertOverwriteJob job = overwriteJobMap.get(jobid);
             jobToTxnId.remove(jobid);
             Set<Long> partitionIds = partitionsWithOverwrite.get(job.getTargetTableId());
-            LOG.info("deregister partitions:{}", partitionIds);
             if (partitionIds != null) {
                 partitionIds.removeAll(job.getTargetPartitionIds());
                 if (partitionIds.isEmpty()) {
@@ -154,26 +144,11 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
         }
     }
 
-    public boolean hasRunningOverwriteJob(long txnId, long tableId) {
-        lock.readLock().lock();
-        try {
-            if (jobToTxnId.values().contains(txnId)) {
-                // overwrite job txn will return false
-                LOG.info("txnId:{} is overwrite job for table:{}, return false", txnId, tableId);
-                return false;
-            }
-            return partitionsWithOverwrite.containsKey(tableId);
-        } finally {
-            lock.readLock().unlock();
-        }
-    }
-
     public boolean hasRunningOverwriteJob(long txnId, long tableId, Set<Long> partitions) {
         lock.readLock().lock();
         try {
             if (jobToTxnId.values().contains(txnId)) {
                 // overwrite job txn will return false
-                LOG.info("txnId:{} is overwrite job for table:{}, return false", txnId, tableId);
                 return false;
             }
             boolean tableExist = partitionsWithOverwrite.containsKey(tableId);
@@ -219,7 +194,6 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
         InsertOverwriteJob job = getOverwriteJob(info.getJobId());
         job.replayStateChange(info);
         if (job.isFinished()) {
-            LOG.info("insert overwrite job is finished. deregister it and remove from runningJobs");
             deregisterOverwriteJob(job.getJobId());
             if (runningJobs != null) {
                 runningJobs.remove(job);
@@ -231,27 +205,30 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
         // resubmit running insert overwrite jobs
         if (!GlobalStateMgr.isCheckpointThread()) {
             cancelJobExecutorService.submit(() -> {
-                // wait until serving catalog is ready
-                while (!GlobalStateMgr.getServingState().isReady()) {
-                    try {
-                        // not return, but sleep a while. to avoid some thread with large running interval will
-                        // wait for a long time to start again.
-                        Thread.sleep(1000);
-                    } catch (InterruptedException e) {
-                        LOG.warn("InsertOverwriteJobManager runAfterCatalogReady interrupted exception.", e);
-                    }
-                }
-                LOG.info("start to cancel running jobs, size:{}", runningJobs.size());
-                if (runningJobs != null) {
-                    for (InsertOverwriteJob job : runningJobs) {
-                        LOG.info("start to gc insert overwrite job:{}", job.getJobId());
+                try {
+                    // wait until serving catalog is ready
+                    while (!GlobalStateMgr.getServingState().isReady()) {
                         try {
-                            job.cancel();
-                        } finally {
-                            deregisterOverwriteJob(job.getJobId());
+                            // not return, but sleep a while. to avoid some thread with large running interval will
+                            // wait for a long time to start again.
+                            Thread.sleep(1000);
+                        } catch (InterruptedException e) {
+                            LOG.warn("InsertOverwriteJobManager runAfterCatalogReady interrupted exception.", e);
                         }
                     }
-                    runningJobs.clear();
+                    if (runningJobs != null) {
+                        for (InsertOverwriteJob job : runningJobs) {
+                            LOG.info("start to cancel unfinished insert overwrite job:{}", job.getJobId());
+                            try {
+                                job.cancel();
+                            } finally {
+                                deregisterOverwriteJob(job.getJobId());
+                            }
+                        }
+                        runningJobs.clear();
+                    }
+                } catch (Exception e) {
+                    LOG.warn("cancel running jobs failed. cancel thread will exit", e);
                 }
             });
         }
@@ -286,7 +263,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
     }
 
     @Override
-    public void gsonPostProcess() throws IOException {
+    public void gsonPostProcess() {
         if (!GlobalStateMgr.isCheckpointThread()) {
             if (runningJobs == null) {
                 runningJobs = Lists.newArrayList();

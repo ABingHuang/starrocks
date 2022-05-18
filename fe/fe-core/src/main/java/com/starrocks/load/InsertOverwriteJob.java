@@ -16,6 +16,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.PartitionPersistInfo;
@@ -152,55 +153,52 @@ public class InsertOverwriteJob {
 
     // only called from log replay
     // there is no concurrent problem here
-    public boolean cancel() {
+    public void cancel() {
         if (isFinished()) {
             LOG.warn("cancel failed. insert overwrite job:{} already finished. state:{}", jobState);
-            return false;
+            return;
         }
         try {
             transferTo(OverwriteJobState.OVERWRITE_CANCELLED);
         } catch (Exception e) {
             LOG.warn("cancel insert overwrite job:{} failed", jobId, e);
-            return false;
         }
-        return true;
     }
 
-    public OverwriteJobState run() throws Exception {
-        handle();
-        return jobState;
-    }
-
-    public void handle() throws Exception {
+    public void run() throws Exception {
         try {
-            switch (jobState) {
-                case OVERWRITE_PENDING:
-                    prepare();
-                    break;
-                case OVERWRITE_PREPARED:
-                    doLoad();
-                    break;
-                case OVERWRITE_FAILED:
-                case OVERWRITE_CANCELLED:
-                    gc();
-                    LOG.warn("insert overwrite job:{} failed. createPartitionElapse:{}," +
-                                    " waitInsertIntoElapse:{}, insertElapse:{}",
-                            jobId, createPartitionElapse, waitInsertIntoElapse, insertElapse);
-                    break;
-                case OVERWRITE_SUCCESS:
-                    LOG.info("insert overwrite job:{} succeed. createPartitionElapse:{}," +
-                            " waitInsertIntoElapse:{}, insertElapse:{}",
-                            jobId, createPartitionElapse, waitInsertIntoElapse, insertElapse);
-                    break;
-                default:
-                    throw new RuntimeException("invalid jobState:" + jobState);
-            }
+            handle();
         } catch (Exception e) {
             LOG.warn("insert overwrite job:{} handle exception", jobId, e);
             if (jobState != OverwriteJobState.OVERWRITE_FAILED && jobState != OverwriteJobState.OVERWRITE_CANCELLED) {
                 transferTo(OverwriteJobState.OVERWRITE_FAILED);
             }
-            throw e;
+            throw new RuntimeException("insert overwrite failed.", e);
+        }
+    }
+
+    public void handle() throws Exception {
+        switch (jobState) {
+            case OVERWRITE_PENDING:
+                prepare();
+                break;
+            case OVERWRITE_PREPARED:
+                doLoad();
+                break;
+            case OVERWRITE_FAILED:
+            case OVERWRITE_CANCELLED:
+                gc();
+                LOG.warn("insert overwrite job:{} failed. createPartitionElapse:{} ms," +
+                                " waitInsertIntoElapse:{} ms, insertElapse:{} ms",
+                        jobId, createPartitionElapse, waitInsertIntoElapse, insertElapse);
+                break;
+            case OVERWRITE_SUCCESS:
+                LOG.info("insert overwrite job:{} succeed. createPartitionElapse:{} ms," +
+                        " waitInsertIntoElapse:{} ms, insertElapse:{} ms",
+                        jobId, createPartitionElapse, waitInsertIntoElapse, insertElapse);
+                break;
+            default:
+                throw new RuntimeException("invalid jobState:" + jobState);
         }
     }
 
@@ -213,8 +211,8 @@ public class InsertOverwriteJob {
             doCommit();
             transferTo(OverwriteJobState.OVERWRITE_SUCCESS);
         } catch (Exception e) {
-            LOG.info("insert overwrite job:{} load failed", jobId, e);
-            throw e;
+            LOG.warn("insert overwrite job:{} load failed", jobId, e);
+            throw new RuntimeException("doLoad failed.", e);
         }
     }
 
@@ -248,6 +246,7 @@ public class InsertOverwriteJob {
                 break;
             default:
                 LOG.warn("invalid to state:{} for insert overwrite job:{}", info.getToState(), jobId);
+                break;
         }
     }
 
@@ -258,7 +257,6 @@ public class InsertOverwriteJob {
         InsertOverwriteStateChangeInfo info =
                 new InsertOverwriteStateChangeInfo(jobId, jobState, state,
                         sourcePartitionNames, newPartitionNames);
-        LOG.info("InsertOverwriteStateChangeInfo:{}", info);
         GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
         jobState = state;
         handle();
@@ -266,28 +264,21 @@ public class InsertOverwriteJob {
 
     private void prepare() throws Exception {
         Preconditions.checkState(jobState == OverwriteJobState.OVERWRITE_PENDING);
-        try {
-            this.watershedTxnId =
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
-            List<Partition> sourcePartitions = insertStmt.getTargetPartitionIds().stream()
-                    .map(id -> targetTable.getPartition(id)).collect(Collectors.toList());
-            sourcePartitionNames = sourcePartitions.stream().map(p -> p.getName()).collect(Collectors.toList());
-            newPartitionNames = sourcePartitionNames.stream().map(name -> name + postfix).collect(Collectors.toList());
-            transferTo(OverwriteJobState.OVERWRITE_PREPARED);
-        } catch (Exception e) {
-            LOG.warn("prepare insert overwrite job:{} failed.", jobId, e);
-            throw e;
-        }
+        this.watershedTxnId =
+                GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+        List<Partition> sourcePartitions = insertStmt.getTargetPartitionIds().stream()
+                .map(id -> targetTable.getPartition(id)).collect(Collectors.toList());
+        sourcePartitionNames = sourcePartitions.stream().map(p -> p.getName()).collect(Collectors.toList());
+        newPartitionNames = sourcePartitionNames.stream().map(name -> name + postfix).collect(Collectors.toList());
+        transferTo(OverwriteJobState.OVERWRITE_PREPARED);
     }
 
     private void executeInsert() throws Exception {
-        LOG.info("start to execute insert");
         long insertStartTimestamp = System.currentTimeMillis();
         // should replan here because prepareInsert has changed the targetPartitionNames of insertStmt
         ExecPlan newPlan = new StatementPlanner().plan(insertStmt, context);
         stmtExecutor.handleDMLStmt(newPlan, insertStmt);
         insertElapse = System.currentTimeMillis() - insertStartTimestamp;
-        LOG.info("execute insert finished");
         if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
             LOG.warn("execute insert failed, jobId:{}", jobId);
             throw new RuntimeException("execute insert failed");
@@ -379,8 +370,11 @@ public class InsertOverwriteJob {
                 targetTable.replacePartition(sourcePartitionNames.get(0), newPartitionNames.get(0));
             }
         } catch (Exception e) {
-            LOG.warn("replace partitions failed when insert overwrite into tableId:{}, table:{}",
-                    targetTableId, targetTableName, e);
+            LOG.warn("replace partitions failed when insert overwrite into tableId:{}, table:{}," +
+                            " sourcePartitionNames:{}, newPartitionNames:{}",
+                    targetTableId, targetTableName,
+                    sourcePartitionNames.stream().collect(Collectors.joining(",")),
+                    newPartitionNames.stream().collect(Collectors.joining(",")), e);
             throw new RuntimeException("replace partitions failed", e);
         } finally {
             db.writeUnlock();
@@ -396,14 +390,11 @@ public class InsertOverwriteJob {
         Preconditions.checkState(jobState == OverwriteJobState.OVERWRITE_PREPARED);
         Preconditions.checkState(insertStmt != null);
         try {
-            LOG.info("start to insert, jobId:{}", jobId);
             db.readLock();
             try {
                 List<Long> newPartitionIds = newPartitionNames.stream()
                         .map(partitionName -> targetTable.getPartition(partitionName, true).getId())
                         .collect(Collectors.toList());
-                LOG.info("newPartitionIds:{}",
-                        Strings.join(newPartitionIds.stream().map(id -> id.toString()).collect(Collectors.toList()), ","));
                 PartitionNames partitionNames = new PartitionNames(true, newPartitionNames);
                 insertStmt.setTargetPartitionNames(partitionNames);
                 insertStmt.setTargetPartitionIds(newPartitionIds);
@@ -411,17 +402,17 @@ public class InsertOverwriteJob {
                 db.readUnlock();
             }
 
-            // wait the previous loads
-            LOG.info("start to wait previous load finish. watershedTxnId:{}", watershedTxnId);
+            // wait the previous loads util finish
             long waitInsertStartTimestamp = System.currentTimeMillis();
             while (!isPreviousLoadFinished() && !context.isKilled()) {
                 Thread.sleep(500);
             }
             waitInsertIntoElapse = waitInsertStartTimestamp - waitInsertStartTimestamp;
-            LOG.info("wait finished. isPreviousLoadFinished:{}, context.isKilled:{}",
-                    isPreviousLoadFinished(), context.isKilled());
+            if (context.isKilled()) {
+                throw new RuntimeException("insert overwrite context is killed");
+            }
         } catch (Exception e) {
-            LOG.warn("insert overwrite job:{} failed in loading.", jobId, e);
+            LOG.warn("insert overwrite job:{} failed in prepareInsert.", jobId, e);
             throw e;
         }
     }

@@ -39,24 +39,12 @@ public class InsertOverwriteStateChangeInfo implements Writable {
         return jobId;
     }
 
-    public void setJobId(long jobId) {
-        this.jobId = jobId;
-    }
-
     public InsertOverwriteJob.OverwriteJobState getFromState() {
         return fromState;
     }
 
-    public void setFromState(InsertOverwriteJob.OverwriteJobState fromState) {
-        this.fromState = fromState;
-    }
-
     public InsertOverwriteJob.OverwriteJobState getToState() {
         return toState;
-    }
-
-    public void setToState(InsertOverwriteJob.OverwriteJobState toState) {
-        this.toState = toState;
     }
 
     public List<String> getSourcePartitionNames() {
@@ -65,10 +53,6 @@ public class InsertOverwriteStateChangeInfo implements Writable {
 
     public List<String> getNewPartitionsName() {
         return newPartitionNames;
-    }
-
-    public void setNewPartitionsName(List<String> newPartitionsName) {
-        this.newPartitionNames = newPartitionsName;
     }
 
     @Override

@@ -425,15 +425,15 @@ public class StmtExecutor {
             } else if (parsedStmt instanceof DmlStmt) {
                 try {
                     if (parsedStmt instanceof InsertStmt && ((InsertStmt) parsedStmt).isOverwrite()) {
-                        LOG.info("start to handle insert overwrite job");
                         InsertStmt insertStmt = (InsertStmt) parsedStmt;
                         Database db = GlobalStateMgr.getCurrentState().getDb(insertStmt.getDb());
                         if (db == null) {
+                            LOG.warn("db:{} do not exist", insertStmt.getDb());
                             throw new RuntimeException("db " + insertStmt.getDb() + " do not exist.");
                         }
                         Table table = insertStmt.getTargetTable();
                         if (!(table instanceof OlapTable)) {
-                            LOG.info("insert overwrite table:{} type:{} is not supported", table.getName(), table.getClass());
+                            LOG.warn("insert overwrite table:{} type:{} is not supported", table.getName(), table.getClass());
                             throw new RuntimeException("not supported table type for insert overwrite");
                         }
                         OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
@@ -446,21 +446,17 @@ public class StmtExecutor {
                         CreateInsertOverwriteJobInfo info = new CreateInsertOverwriteJobInfo(insertOverwriteJob.getJobId(),
                                 insertOverwriteJob.getTargetDbId(), insertOverwriteJob.getTargetTableId(),
                                 insertOverwriteJob.getTargetTableName(), insertOverwriteJob.getTargetPartitionIds());
-                        LOG.info("create insert overwrite job info:{}", info);
                         GlobalStateMgr.getCurrentState().getEditLog().logCreateInsertOverwrite(info);
-                        InsertOverwriteJobManager manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager();
-
-                        Boolean isSuccess = manager.submitJob(insertOverwriteJob);
-                        if (isSuccess) {
-                            LOG.info("execute insert overwrite success");
-                        } else {
-                            // Fixme: modify the failed result
-                            LOG.info("execute insert overwrite failed");
-                            throw new RuntimeException("insert overwrite failed");
+                        try {
+                            InsertOverwriteJobManager manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager();
+                            manager.submitJob(insertOverwriteJob);
+                        } catch (Exception e) {
+                            LOG.warn("execute insert overwrite job:{} failed", insertOverwriteJob.getJobId(), e);
+                            throw new RuntimeException("insert overwrite failed", e);
                         }
-                        return;
+                    } else {
+                        handleDMLStmt(execPlan, (DmlStmt) parsedStmt);
                     }
-                    handleDMLStmt(execPlan, (DmlStmt) parsedStmt);
                     if (context.getSessionVariable().isReportSucc()) {
                         writeProfile(beginTimeInNanoSecond);
                     }

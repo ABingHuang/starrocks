@@ -56,7 +56,6 @@ public class InsertOverwriteJobManagerTest {
         targetPartitionIds = Sets.newHashSet(10L, 20L, 30L, 40L);
     }
 
-    /*
     @Test
     public void testBasic() throws Exception {
         new Expectations() {
@@ -82,8 +81,7 @@ public class InsertOverwriteJobManagerTest {
         insertOverwriteJobManager.deregisterOverwriteJob(1100L);
         Assert.assertEquals(0, insertOverwriteJobManager.getJobNum());
 
-        boolean ret = insertOverwriteJobManager.submitJob(insertOverwriteJob2);
-        Assert.assertTrue(ret);
+        insertOverwriteJobManager.submitJob(insertOverwriteJob2);
 
         insertOverwriteJobManager.registerOverwriteJob(insertOverwriteJob2);
         Assert.assertEquals(1, insertOverwriteJobManager.getJobNum());
@@ -95,9 +93,6 @@ public class InsertOverwriteJobManagerTest {
         Assert.assertFalse(insertOverwriteJobManager.hasRunningOverwriteJob(2l, 110L, targetPartitionIds));
     }
 
-     */
-
-    /*
     @Test
     public void testReplay() throws Exception {
         new Expectations() {
@@ -143,11 +138,8 @@ public class InsertOverwriteJobManagerTest {
         Assert.assertEquals(0, insertOverwriteJobManager.getRunningJobSize());
     }
 
-     */
-
     @Test
-    public void testSerialization() {
-        /*
+    public void testSerialization() throws IOException {
         new Expectations() {
             {
                 db.getId();
@@ -161,11 +153,6 @@ public class InsertOverwriteJobManagerTest {
             }
         };
 
-         */
-
-        insertOverwriteJob1 = new InsertOverwriteJob(1000L, context, stmtExecutor, insertStmt, db, table1, targetPartitionIds);
-        Assert.assertTrue(insertOverwriteJob1 != null);
-        /*
         insertOverwriteJobManager.registerOverwriteJob(insertOverwriteJob1);
         Assert.assertEquals(1, insertOverwriteJobManager.getJobNum());
 
@@ -184,7 +171,5 @@ public class InsertOverwriteJobManagerTest {
         Assert.assertEquals(110L, newJob.getTargetTableId());
         Assert.assertEquals("table_1", newJob.getTargetTableName());
         Assert.assertEquals(targetPartitionIds, newJob.getTargetPartitionIds());
-
-         */
     }
 }
