@@ -478,7 +478,7 @@ public class DatabaseTransactionMgr {
             }
             boolean hasRunningJobs =
                     GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager().hasRunningOverwriteJob(
-                            transactionId, tableId, tableToPartition.get(tableId));
+                            transactionId, tableId, tableToPartition.get(tableId).stream().collect(Collectors.toList()));
             LOG.info("hasRunningJobs:{}, txnId:{}", hasRunningJobs, transactionId);
             if (hasRunningJobs) {
                 throw new TransactionCommitFailedException("There are running insert" +

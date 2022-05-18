@@ -130,7 +130,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
@@ -437,15 +436,14 @@ public class StmtExecutor {
                             throw new RuntimeException("not supported table type for insert overwrite");
                         }
                         OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
-                        Set<Long> targetPartitionSet = insertStmt.getTargetPartitionIds().stream().collect(Collectors.toSet());
                         InsertOverwriteJob insertOverwriteJob =
                                 new InsertOverwriteJob(GlobalStateMgr.getCurrentState().getNextId(), context, this,
-                                        insertStmt, db, olapTable, targetPartitionSet);
+                                        insertStmt, db, olapTable);
                         insertStmt.setOverwriteJobId(insertOverwriteJob.getJobId());
                         // add edit log
                         CreateInsertOverwriteJobInfo info = new CreateInsertOverwriteJobInfo(insertOverwriteJob.getJobId(),
                                 insertOverwriteJob.getTargetDbId(), insertOverwriteJob.getTargetTableId(),
-                                insertOverwriteJob.getTargetTableName(), insertOverwriteJob.getTargetPartitionIds());
+                                insertOverwriteJob.getTargetTableName(), insertOverwriteJob.getOriginalTargetPartitionIds());
                         GlobalStateMgr.getCurrentState().getEditLog().logCreateInsertOverwrite(info);
                         try {
                             InsertOverwriteJobManager manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager();

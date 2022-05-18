@@ -10,8 +10,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.Set;
-
+import java.util.List;
 public class CreateInsertOverwriteJobInfo implements Writable {
     @SerializedName(value = "jobId")
     private long jobId;
@@ -26,10 +25,10 @@ public class CreateInsertOverwriteJobInfo implements Writable {
     private String tableName;
 
     @SerializedName(value = "targetPartitionIds")
-    private Set<Long> targetPartitionIds;
+    private List<Long> targetPartitionIds;
 
     public CreateInsertOverwriteJobInfo(long jobId, long dbId, long tableId,
-                                        String tableName, Set<Long> targetPartitionIds) {
+                                        String tableName, List<Long> targetPartitionIds) {
         this.jobId = jobId;
         this.dbId = dbId;
         this.tableId = tableId;
@@ -53,7 +52,7 @@ public class CreateInsertOverwriteJobInfo implements Writable {
         return tableName;
     }
 
-    public Set<Long> getTargetPartitionIds() {
+    public List<Long> getTargetPartitionIds() {
         return targetPartitionIds;
     }
 

@@ -7050,9 +7050,10 @@ public class GlobalStateMgr {
     // create new partitions from source partitions.
     // new partitions have the same indexes as source partitions.
     public List<Partition> createTempPartitionsFromPartitions(Database db, OlapTable olapTable,
-                                                              String namePostfix, Set<Long> sourcePartitionIds) {
+                                                              String namePostfix, List<Long> sourcePartitionIds) {
         OlapTable copiedTbl;
-        Map<String, Long> origPartitions = Maps.newHashMap();
+        // Map<String, Long> origPartitions = Maps.newHashMap();
+        Map<Long, String> origPartitions = Maps.newHashMap();
         db.readLock();
         try {
             if (olapTable.getState() != OlapTableState.NORMAL) {
@@ -7060,9 +7061,9 @@ public class GlobalStateMgr {
                         + ", tableId:" + olapTable.getId() + ", tabletName:" + olapTable.getName());
             }
             for (Long id : sourcePartitionIds) {
-                origPartitions.put(olapTable.getPartition(id).getName(), id);
+                origPartitions.put(id, olapTable.getPartition(id).getName());
             }
-            copiedTbl = olapTable.selectiveCopy(origPartitions.keySet(), true, IndexExtState.VISIBLE);
+            copiedTbl = olapTable.selectiveCopy(origPartitions.values(), true, IndexExtState.VISIBLE);
         } finally {
             db.readUnlock();
         }
@@ -7072,10 +7073,9 @@ public class GlobalStateMgr {
         // tabletIdSet to save all newly created tablet ids.
         Set<Long> tabletIdSet = Sets.newHashSet();
         try {
-            for (Map.Entry<String, Long> entry : origPartitions.entrySet()) {
-                long oldPartitionId = entry.getValue();
+            for (Long sourcePartitionId : sourcePartitionIds) {
                 long newPartitionId = getNextId();
-                String newPartitionName = entry.getKey() + namePostfix;
+                String newPartitionName = origPartitions.get(sourcePartitionId) + namePostfix;
                 if (olapTable.checkPartitionNameExist(newPartitionName, true)) {
                     // to prevent creating the same partitions when failover
                     // this will happen when OverwriteJob crashed after created temp partitions, but before changing to PREPARED state
@@ -7083,10 +7083,10 @@ public class GlobalStateMgr {
                     continue;
                 }
                 PartitionInfo partitionInfo = copiedTbl.getPartitionInfo();
-                partitionInfo.setTabletType(newPartitionId, partitionInfo.getTabletType(oldPartitionId));
-                partitionInfo.setIsInMemory(newPartitionId, partitionInfo.getIsInMemory(oldPartitionId));
-                partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(oldPartitionId));
-                partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(oldPartitionId));
+                partitionInfo.setTabletType(newPartitionId, partitionInfo.getTabletType(sourcePartitionId));
+                partitionInfo.setIsInMemory(newPartitionId, partitionInfo.getIsInMemory(sourcePartitionId));
+                partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(sourcePartitionId));
+                partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(sourcePartitionId));
 
                 Partition newPartition =
                         createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);

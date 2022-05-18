@@ -30,7 +30,6 @@ import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
 
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 public class InsertOverwriteJob {
@@ -65,7 +64,7 @@ public class InsertOverwriteJob {
     private String targetTableName;
 
     @SerializedName(value = "targetPartitionIds")
-    private Set<Long> targetPartitionIds;
+    private List<Long> originalTargetPartitionIds;
 
     private long watershedTxnId = -1;
     private InsertStmt insertStmt;
@@ -81,14 +80,14 @@ public class InsertOverwriteJob {
 
     public InsertOverwriteJob(long jobId, ConnectContext context, StmtExecutor stmtExecutor,
                               InsertStmt insertStmt, Database db,
-                              OlapTable targetTable, Set<Long> targetPartitionIds) {
+                              OlapTable targetTable) {
         this.jobId = jobId;
         this.context = context;
         this.stmtExecutor = stmtExecutor;
         this.insertStmt = insertStmt;
         this.db = db;
         this.targetTable = targetTable;
-        this.targetPartitionIds = targetPartitionIds;
+        this.originalTargetPartitionIds = insertStmt.getTargetPartitionIds();
         this.jobState = OverwriteJobState.OVERWRITE_PENDING;
         this.dbId = db.getId();
         this.targetTableId = targetTable.getId();
@@ -101,13 +100,13 @@ public class InsertOverwriteJob {
 
     // used to replay InsertOverwriteJob
     public InsertOverwriteJob(long jobId, long dbId, long targetTableId,
-                              String targetTableName, Set<Long> targetPartitionIds) {
+                              String targetTableName, List<Long> targetPartitionIds) {
         this.jobId = jobId;
         this.jobState = OverwriteJobState.OVERWRITE_PENDING;
         this.dbId = dbId;
         this.targetTableId = targetTableId;
         this.targetTableName = targetTableName;
-        this.targetPartitionIds = targetPartitionIds;
+        this.originalTargetPartitionIds = targetPartitionIds;
         this.db = GlobalStateMgr.getCurrentState().getDb(dbId);
         this.targetTable = (OlapTable) db.getTable(targetTableId);
         this.postfix = "_" + jobId;
@@ -136,8 +135,8 @@ public class InsertOverwriteJob {
         return targetTableName;
     }
 
-    public Set<Long> getTargetPartitionIds() {
-        return targetPartitionIds;
+    public List<Long> getOriginalTargetPartitionIds() {
+        return originalTargetPartitionIds;
     }
 
     public OverwriteJobState getJobState() {
@@ -264,7 +263,9 @@ public class InsertOverwriteJob {
         Preconditions.checkState(jobState == OverwriteJobState.OVERWRITE_PENDING);
         this.watershedTxnId =
                 GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
-        List<Partition> sourcePartitions = insertStmt.getTargetPartitionIds().stream()
+        //List<Partition> sourcePartitions = insertStmt.getTargetPartitionIds().stream()
+        //        .map(id -> targetTable.getPartition(id)).collect(Collectors.toList());
+        List<Partition> sourcePartitions = originalTargetPartitionIds.stream()
                 .map(id -> targetTable.getPartition(id)).collect(Collectors.toList());
         sourcePartitionNames = sourcePartitions.stream().map(p -> p.getName()).collect(Collectors.toList());
         newPartitionNames = sourcePartitionNames.stream().map(name -> name + postfix).collect(Collectors.toList());
@@ -287,13 +288,15 @@ public class InsertOverwriteJob {
         try {
             long createPartitionStartTimestamp = System.currentTimeMillis();
             List<Partition> newTempPartitions = GlobalStateMgr.getCurrentState().createTempPartitionsFromPartitions(
-                    db, targetTable, postfix, targetPartitionIds);
-            LOG.info("postfix:{}, sourcePartitionNames:{}, newPartitionNames:{}, newTempPartitions size:{}",
+                    db, targetTable, postfix, originalTargetPartitionIds);
+            LOG.info("postfix:{}, sourcePartitionNames:{}, newPartitionNames:{}," +
+                            " newTempPartitions size:{}, newTempPartitionNames:{}",
                     postfix, Strings.join(sourcePartitionNames, ","), Strings.join(newPartitionNames, ","),
-                    newTempPartitions.size());
+                    newTempPartitions.size(),
+                    Strings.join(newTempPartitions.stream().map(p -> p.getName()).collect(Collectors.toList()), ","));
             db.writeLock();
             try {
-                List<Partition> sourcePartitions = insertStmt.getTargetPartitionIds().stream()
+                List<Partition> sourcePartitions = originalTargetPartitionIds.stream()
                         .map(id -> targetTable.getPartition(id)).collect(Collectors.toList());
                 PartitionInfo partitionInfo = targetTable.getPartitionInfo();
                 List<PartitionPersistInfo> partitionInfoList = Lists.newArrayListWithCapacity(newTempPartitions.size());

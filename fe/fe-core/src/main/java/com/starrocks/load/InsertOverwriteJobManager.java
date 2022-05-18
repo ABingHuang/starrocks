@@ -13,7 +13,6 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.util.concurrent.DefaultThreadFactory;
-import jersey.repackaged.com.google.common.collect.Sets;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -22,7 +21,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
@@ -36,7 +34,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
 
     // tableId -> partitionId list
     @SerializedName(value = "partitionsWithOverwrite")
-    private Map<Long, Set<Long>> partitionsWithOverwrite;
+    private Map<Long, List<Long>> partitionsWithOverwrite;
 
     @SerializedName(value = "jobNum")
     private long jobNum;
@@ -99,14 +97,14 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
                 return false;
             }
             // check whether there is a overwrite job running in partitions
-            if (hasRunningOverwriteJob(-1, job.getTargetTableId(), job.getTargetPartitionIds())) {
+            if (hasRunningOverwriteJob(-1, job.getTargetTableId(), job.getOriginalTargetPartitionIds())) {
                 LOG.warn("table:{} has running overwrite jobs", job.getTargetTableId());
                 return false;
             }
             overwriteJobMap.put(job.getJobId(), job);
-            Set<Long> runningPartitions = partitionsWithOverwrite.getOrDefault(job.getTargetTableId(), Sets.newHashSet());
-            if (job.getTargetPartitionIds() != null) {
-                runningPartitions.addAll(job.getTargetPartitionIds());
+            List<Long> runningPartitions = partitionsWithOverwrite.getOrDefault(job.getTargetTableId(), Lists.newArrayList());
+            if (job.getOriginalTargetPartitionIds() != null) {
+                runningPartitions.addAll(job.getOriginalTargetPartitionIds());
             }
             partitionsWithOverwrite.put(job.getTargetTableId(), runningPartitions);
             jobNum++;
@@ -124,9 +122,9 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
             }
             InsertOverwriteJob job = overwriteJobMap.get(jobid);
             jobToTxnId.remove(jobid);
-            Set<Long> partitionIds = partitionsWithOverwrite.get(job.getTargetTableId());
+            List<Long> partitionIds = partitionsWithOverwrite.get(job.getTargetTableId());
             if (partitionIds != null) {
-                partitionIds.removeAll(job.getTargetPartitionIds());
+                partitionIds.removeAll(job.getOriginalTargetPartitionIds());
                 if (partitionIds.isEmpty()) {
                     partitionsWithOverwrite.remove(job.getTargetTableId());
                 }
@@ -144,7 +142,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
         }
     }
 
-    public boolean hasRunningOverwriteJob(long txnId, long tableId, Set<Long> partitions) {
+    public boolean hasRunningOverwriteJob(long txnId, long tableId, List<Long> partitions) {
         lock.readLock().lock();
         try {
             if (jobToTxnId.values().contains(txnId)) {
@@ -159,7 +157,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
                 // means check table
                 return true;
             }
-            Set<Long> runningPartitions = partitionsWithOverwrite.get(tableId);
+            List<Long> runningPartitions = partitionsWithOverwrite.get(tableId);
             if (runningPartitions == null || runningPartitions.isEmpty()) {
                 return true;
             }

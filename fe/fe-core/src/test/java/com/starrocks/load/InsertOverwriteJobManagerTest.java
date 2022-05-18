@@ -2,6 +2,7 @@
 
 package com.starrocks.load;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -9,7 +10,6 @@ import com.starrocks.persist.CreateInsertOverwriteJobInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import jersey.repackaged.com.google.common.collect.Sets;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -21,7 +21,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.util.Set;
+import java.util.List;
 
 public class InsertOverwriteJobManagerTest {
 
@@ -48,12 +48,12 @@ public class InsertOverwriteJobManagerTest {
 
     private InsertOverwriteJobManager insertOverwriteJobManager;
     private InsertOverwriteJob insertOverwriteJob1;
-    private Set<Long> targetPartitionIds;
+    private List<Long> targetPartitionIds;
 
     @Before
     public void setUp() {
         insertOverwriteJobManager = new InsertOverwriteJobManager();
-        targetPartitionIds = Sets.newHashSet(10L, 20L, 30L, 40L);
+        targetPartitionIds = Lists.newArrayList(10L, 20L, 30L, 40L);
     }
 
     @Test
@@ -69,7 +69,7 @@ public class InsertOverwriteJobManagerTest {
                 insertOverwriteJob2.run();
                 result = InsertOverwriteJob.OverwriteJobState.OVERWRITE_SUCCESS;
 
-                insertOverwriteJob2.getTargetPartitionIds();
+                insertOverwriteJob2.getOriginalTargetPartitionIds();
                 result = targetPartitionIds;
 
             }
@@ -118,7 +118,7 @@ public class InsertOverwriteJobManagerTest {
                 insertOverwriteJob2.cancel();
                 result = true;
 
-                insertOverwriteJob2.getTargetPartitionIds();
+                insertOverwriteJob2.getOriginalTargetPartitionIds();
                 result = targetPartitionIds;
 
             }
@@ -170,6 +170,6 @@ public class InsertOverwriteJobManagerTest {
         Assert.assertEquals(100L, newJob.getTargetDbId());
         Assert.assertEquals(110L, newJob.getTargetTableId());
         Assert.assertEquals("table_1", newJob.getTargetTableName());
-        Assert.assertEquals(targetPartitionIds, newJob.getTargetPartitionIds());
+        Assert.assertEquals(targetPartitionIds, newJob.getOriginalTargetPartitionIds());
     }
 }
