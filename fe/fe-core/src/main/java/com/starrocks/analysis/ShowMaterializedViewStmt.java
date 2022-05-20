@@ -21,11 +21,16 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Strings;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRelation;
 
 // Show rollup statement, used to show rollup information of one table.
 //
@@ -40,6 +45,8 @@ public class ShowMaterializedViewStmt extends ShowStmt {
                     .addColumn(new Column("text", ScalarType.createVarchar(1024)))
                     .addColumn(new Column("rows", ScalarType.createVarchar(50)))
                     .build();
+
+    private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "materialized_views");
 
     private String db;
 
@@ -65,6 +72,12 @@ public class ShowMaterializedViewStmt extends ShowStmt {
         this.where = where;
     }
 
+    public ShowMaterializedViewStmt(String db, String pattern, Expr where) {
+        this.db = db;
+        this.pattern = pattern;
+        this.where = where;
+    }
+
     public String getDb() {
         return db;
     }
@@ -73,14 +86,36 @@ public class ShowMaterializedViewStmt extends ShowStmt {
         this.db = db;
     }
 
+    public String getPattern() {
+        return pattern;
+    }
+
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
     }
 
     @Override
+    public QueryStatement toSelectStmt() throws AnalysisException {
+        if (where == null) {
+            return null;
+        }
+        SelectList selectList = new SelectList();
+        SelectListItem item = new SelectListItem(TABLE_NAME);
+        selectList.addItem(item);
+        return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
+                where, null, null));
+    }
+
+    @Override
     public String toSql() {
         StringBuilder sb = new StringBuilder();
-        sb.append("SHOW MATERIALIZED VIEW FROM ").append(db);
+        sb.append("SHOW MATERIALIZED VIEW");
+        if (!Strings.isNullOrEmpty(db)) {
+            sb.append(" FROM ").append(db);
+        }
+        if (pattern != null) {
+            sb.append(" LIKE '").append(pattern).append("'");
+        }
         return sb.toString();
     }
 

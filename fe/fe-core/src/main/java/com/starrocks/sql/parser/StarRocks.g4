@@ -178,7 +178,7 @@ createMaterializedViewStatement
     ;
 
 showMaterializedViewStatement
-    : SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?
+    : SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 dropMaterializedViewStatement
