@@ -203,6 +203,7 @@ public class InsertOverwriteJobRunner {
     private void executeInsert() throws Exception {
         long insertStartTimestamp = System.currentTimeMillis();
         insertStmt.setOverwrite(false);
+        Thread.sleep(100000);
         // should replan here because prepareInsert has changed the targetPartitionNames of insertStmt
         ExecPlan newPlan = new StatementPlanner().plan(insertStmt, context);
         stmtExecutor.handleDMLStmt(newPlan, insertStmt);
