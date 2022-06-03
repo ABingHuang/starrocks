@@ -24,6 +24,7 @@ package com.starrocks.qe;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AddSqlBlackListStmt;
 import com.starrocks.analysis.Analyzer;
@@ -1098,6 +1099,13 @@ public class StmtExecutor {
 
         TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
+        boolean isExclusive = false;
+        Map<Long, List<Long>> tablePartitionIds = Maps.newHashMap();
+        if (parsedStmt instanceof InsertStmt && ((InsertStmt) parsedStmt).isOverwrite()) {
+            isExclusive = true;
+            tablePartitionIds.put(targetTable.getId(), ((InsertStmt) parsedStmt).getOriginalTargetPartitionIds());
+            sourceType = TransactionState.LoadJobSourceType.INSERT_OVERWRITE;
+        }
         long transactionId = -1;
         if (targetTable instanceof ExternalOlapTable) {
             ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
@@ -1119,7 +1127,7 @@ public class StmtExecutor {
                     new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
                             FrontendOptions.getLocalHostAddress()),
                     sourceType,
-                    ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                    ConnectContext.get().getSessionVariable().getQueryTimeoutS(), tablePartitionIds, isExclusive);
 
             // add table indexes to transaction state
             TransactionState txnState =
@@ -1130,28 +1138,16 @@ public class StmtExecutor {
             }
             if (targetTable instanceof OlapTable) {
                 txnState.addTableIndexes((OlapTable) targetTable);
-                if (stmt instanceof InsertStmt && ((InsertStmt) stmt).isOverwrite()) {
-                    long jobId = ((InsertStmt) stmt).getOverwriteJobId();
-                    GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager()
-                            .registerOverwriteJobTxn(jobId, transactionId);
+                if (parsedStmt instanceof InsertStmt && ((InsertStmt) parsedStmt).isOverwrite()) {
+                    InsertStmt insertStmt = (InsertStmt) parsedStmt;
+                    Map<Long, List<Long>> tableToOriginalTargetPartitionIds = Maps.newHashMap();
+                    tableToOriginalTargetPartitionIds.put(targetTable.getId(), insertStmt.getOriginalTargetPartitionIds());
+                    txnState.setOriginalTargetPartitions(tableToOriginalTargetPartitionIds);
+                    LOG.info("insert overwrite job:{} related transaction id:{}",
+                            insertStmt.getOverwriteJobId(), transactionId);
                 }
             }
         }
-
-        /*
-        if (targetTable instanceof OlapTable) {
-            List<Long> targetPartitionIds = null;
-            if (stmt instanceof InsertStmt) {
-                targetPartitionIds = ((InsertStmt) stmt).getTargetPartitionIds();
-            }
-            boolean hasRunningInsertOverwriteJob = GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager()
-                    .hasRunningOverwriteJob(transactionId, targetTable.getId(), targetPartitionIds);
-            if (hasRunningInsertOverwriteJob) {
-                throw new DdlException("there is running insert overwrite job");
-            }
-        }
-         */
-
         // Every time set no send flag and clean all data in buffer
         if (context.getMysqlChannel() != null) {
             context.getMysqlChannel().reset();
@@ -1232,7 +1228,8 @@ public class StmtExecutor {
                         database,
                         transactionId,
                         TabletCommitInfo.fromThrift(coord.getCommitInfos()),
-                        context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000)) {
+                        context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000,
+                        Lists.newArrayList(targetTable.getId()), tablePartitionIds, isExclusive)) {
                     txnStatus = TransactionStatus.VISIBLE;
                     MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
                     // collect table-level metrics
@@ -1262,7 +1259,8 @@ public class StmtExecutor {
                 } else {
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                             database.getId(), transactionId,
-                            t.getMessage() == null ? "Unknown reason" : t.getMessage());
+                            t.getMessage() == null ? "Unknown reason" : t.getMessage(),
+                            Lists.newArrayList(targetTable.getId()), tablePartitionIds, isExclusive);
                 }
             } catch (Exception abortTxnException) {
                 // just print a log if abort txn failed. This failure do not need to pass to user.

@@ -135,6 +135,9 @@ public class InsertStmt extends DmlStmt {
      */
     private boolean isTransactionBegin = false;
 
+    // used by insert overwrite
+    private List<Long> originalTargetPartitionIds;
+
     public InsertStmt(InsertTarget target, String label, List<String> cols, InsertSource source, List<String> hints) {
         this.tblName = target.getTblName();
         this.targetPartitionNames = target.getPartitionNames();
@@ -919,6 +922,14 @@ public class InsertStmt extends DmlStmt {
 
     public List<Long> getTargetPartitionIds() {
         return targetPartitionIds;
+    }
+
+    public List<Long> getOriginalTargetPartitionIds() {
+        return originalTargetPartitionIds;
+    }
+
+    public void setOriginalTargetPartitionIds(List<Long> originalTargetPartitionIds) {
+        this.originalTargetPartitionIds = originalTargetPartitionIds;
     }
 
     public void setTargetColumns(List<Column> targetColumns) {
