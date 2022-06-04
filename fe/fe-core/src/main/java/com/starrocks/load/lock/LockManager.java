@@ -29,15 +29,39 @@ public class LockManager {
             return tryLock(pathIds, 0, targetContext, exclusive);
         }
 
+        private boolean isChildExclusiveLocked() {
+            if (!hasChild()) {
+                return false;
+            }
+            for (Node child : children.values()) {
+                if (child.isExclusive || child.isChildExclusiveLocked()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         public boolean tryLock(Long[] pathIds, int index, LockTarget.TargetContext targetContext, boolean exclusive) {
             if (!lock.tryLock()) {
                 return false;
             }
             try {
                 if (index == pathIds.length) {
-                    if (this.isExclusive || exclusive && hasLock()) {
+                    if (this.isExclusive) {
                         return false;
                     }
+                    if (exclusive && hasLock()) {
+                        return false;
+                    }
+                    if (exclusive && hasChild()) {
+                        // if node has child locked, can not be locked exclusive
+                        return false;
+                    }
+                    if (isChildExclusiveLocked()) {
+                        // if child has been exclusive locked, return false
+                        return false;
+                    }
+
                     set(targetContext, exclusive);
                     return true;
                 }
@@ -51,6 +75,9 @@ public class LockManager {
                     if (child == null) {
                         child = new Node();
                         children.put(pathIds[index], child);
+                    } else if (child.isExclusive) {
+                        LOG.info("node is exclusive locked");
+                        return false;
                     }
                 }
                 return child.tryLock(pathIds, index + 1, targetContext, exclusive);
