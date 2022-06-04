@@ -109,12 +109,12 @@ public class LockManager {
 
     // null if failed
     public Lock tryLock(LockTarget lockTarget, LockMode mode) {
-        LOG.debug("Acquiring lock for {} with mode {}", lockTarget.getName(), mode);
+        LOG.info("Acquiring lock for {} with mode {}", lockTarget.getName(), mode);
         return tryLockInternal(lockTarget, mode);
     }
 
     public void unlock(Lock lock) {
-        LOG.debug("release lock for {} with mode {}", lock.getLockTarget().getName(), lock.getLockMode());
+        LOG.info("release lock for {} with mode {}", lock.getLockTarget().getName(), lock.getLockMode());
         root.unlock(lock.getLockTarget().getPathIds(), lock.getLockTarget().getTargetContext());
     }
 
@@ -124,6 +124,7 @@ public class LockManager {
     }
 
     public void unlock(List<Lock> locks) {
+        LOG.info("unlock locks");
         for (Lock lock : locks) {
             unlock(lock);
         }

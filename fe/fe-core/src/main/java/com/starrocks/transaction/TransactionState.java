@@ -293,6 +293,7 @@ public class TransactionState implements Writable {
     }
 
     public void unlock() {
+        LOG.info("start to unlock locks. size:{}", locks.size());
         if (locks != null) {
             GlobalStateMgr.getCurrentState().getLockManager().unlock(locks);
         }
