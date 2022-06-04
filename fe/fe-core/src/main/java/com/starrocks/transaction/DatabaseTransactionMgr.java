@@ -352,10 +352,11 @@ public class DatabaseTransactionMgr {
                 stringBuilder.append("lock failed.");
                 stringBuilder.append("dbId:").append(dbId);
                 stringBuilder.append("tableIds:").append(Strings.join(tableIdList, ','));
+                LOG.warn(stringBuilder.toString());
                 throw new LockException(stringBuilder.toString());
             }
             transactionState.setLocks(locks);
-            LOG.info("acquire locks size:", locks.size());
+            LOG.info("acquire locks size:{}", locks.size());
             unprotectUpsertTransactionState(transactionState, false);
 
             if (MetricRepo.isInit) {

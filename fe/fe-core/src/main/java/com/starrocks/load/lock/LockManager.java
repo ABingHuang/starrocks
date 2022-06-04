@@ -109,7 +109,6 @@ public class LockManager {
 
     // null if failed
     public Lock tryLock(LockTarget lockTarget, LockMode mode) {
-        LOG.info("Acquiring lock for {} with mode {}", lockTarget.getName(), mode);
         return tryLockInternal(lockTarget, mode);
     }
 
@@ -131,6 +130,7 @@ public class LockManager {
     }
 
     private Lock tryLockInternal(LockTarget lockTarget, LockMode mode) {
+        LOG.info("Acquiring lock for {} with mode {}", lockTarget.getName(), mode);
         if (root.tryLock(lockTarget.getPathIds(), lockTarget.getTargetContext(), mode == LockMode.EXCLUSIVE)) {
             return new Lock(lockTarget, mode);
         }
