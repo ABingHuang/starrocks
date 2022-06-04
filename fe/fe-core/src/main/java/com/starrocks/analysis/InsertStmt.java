@@ -129,6 +129,8 @@ public class InsertStmt extends DmlStmt {
     private boolean isOverwrite;
     private long overwriteJobId = -1;
 
+    private boolean isPartitionTarget;
+
     /*
      * InsertStmt may be analyzed twice, but transaction must be only begun once.
      * So use a boolean to check if transaction already begun.
@@ -149,6 +151,7 @@ public class InsertStmt extends DmlStmt {
         if (!Strings.isNullOrEmpty(label)) {
             isUserSpecifiedLabel = true;
         }
+        this.isPartitionTarget = this.targetPartitionNames != null;
     }
 
     public InsertStmt(InsertTarget target, String label, List<String> cols, QueryStatement queryStatement,
@@ -164,6 +167,7 @@ public class InsertStmt extends DmlStmt {
         if (!Strings.isNullOrEmpty(label)) {
             isUserSpecifiedLabel = true;
         }
+        this.isPartitionTarget = this.targetPartitionNames != null;
     }
 
     // Ctor for CreateTableAsSelectStmt
@@ -173,6 +177,7 @@ public class InsertStmt extends DmlStmt {
         this.targetColumnNames = null;
         this.queryStatement = queryStatement;
         this.planHints = null;
+        this.isPartitionTarget = false;
     }
 
     public TupleDescriptor getOlapTuple() {
@@ -221,6 +226,10 @@ public class InsertStmt extends DmlStmt {
 
     public boolean hasOverwriteJob() {
         return overwriteJobId > 0;
+    }
+
+    public boolean isPartitionTarget() {
+        return isPartitionTarget;
     }
 
     // TODO(zc): used to get all dbs for lock

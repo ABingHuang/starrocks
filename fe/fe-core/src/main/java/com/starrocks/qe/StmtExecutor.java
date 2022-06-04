@@ -1103,8 +1103,10 @@ public class StmtExecutor {
         Map<Long, List<Long>> tablePartitionIds = Maps.newHashMap();
         if (parsedStmt instanceof InsertStmt && ((InsertStmt) parsedStmt).isOverwrite()) {
             isExclusive = true;
-            tablePartitionIds.put(targetTable.getId(), ((InsertStmt) parsedStmt).getOriginalTargetPartitionIds());
             sourceType = TransactionState.LoadJobSourceType.INSERT_OVERWRITE;
+            if (((InsertStmt) parsedStmt).isPartitionTarget()) {
+                tablePartitionIds.put(targetTable.getId(), ((InsertStmt) parsedStmt).getOriginalTargetPartitionIds());
+            }
         }
         long transactionId = -1;
         if (targetTable instanceof ExternalOlapTable) {
