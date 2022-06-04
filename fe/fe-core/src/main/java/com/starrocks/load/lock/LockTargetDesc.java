@@ -18,4 +18,8 @@ public class LockTargetDesc {
     public LockMode getLockMode() {
         return lockMode;
     }
+
+    public String toString() {
+        return "target pathIds:" + lockTarget.getName() + ", lock mode:" + lockMode.name();
+    }
 }

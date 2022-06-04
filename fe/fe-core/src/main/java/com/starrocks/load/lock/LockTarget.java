@@ -5,9 +5,9 @@ package com.starrocks.load.lock;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.transaction.TransactionState;
-import org.apache.logging.log4j.util.Strings;
 
 import java.util.Arrays;
+import java.util.stream.Collectors;
 
 public class LockTarget {
     private Long[] pathIds = null;
@@ -92,7 +92,7 @@ public class LockTarget {
         if (pathIds == null) {
             return null;
         }
-        final String str = Strings.join(Arrays.stream(pathIds).iterator(), '.');
+        final String str = Arrays.stream(pathIds).map(pathId -> pathId.toString()).collect(Collectors.joining(","));
         return str;
     }
 }

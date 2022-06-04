@@ -15,6 +15,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
 
+// LockManager with nonblocking tryLock
+// a blocking lock api maybe will be added in the future
 public class LockManager {
     private static final Logger LOG = LogManager.getLogger(LockManager.class);
     private class Node {

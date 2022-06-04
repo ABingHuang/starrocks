@@ -885,7 +885,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         boolean ret = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                 db, request.getTxnId(),
                 TabletCommitInfo.fromThrift(request.getCommitInfos()),
-                timeoutMs, attachment, Lists.newArrayList(tbl.getId()), Maps.newHashMap(), false);
+                timeoutMs, attachment);
         if (!ret) {
             return ret;
         }

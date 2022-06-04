@@ -1228,8 +1228,7 @@ public class StmtExecutor {
                         database,
                         transactionId,
                         TabletCommitInfo.fromThrift(coord.getCommitInfos()),
-                        context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000,
-                        Lists.newArrayList(targetTable.getId()), tablePartitionIds, isExclusive)) {
+                        context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000)) {
                     txnStatus = TransactionStatus.VISIBLE;
                     MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
                     // collect table-level metrics
@@ -1259,8 +1258,7 @@ public class StmtExecutor {
                 } else {
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                             database.getId(), transactionId,
-                            t.getMessage() == null ? "Unknown reason" : t.getMessage(),
-                            Lists.newArrayList(targetTable.getId()), tablePartitionIds, isExclusive);
+                            t.getMessage() == null ? "Unknown reason" : t.getMessage());
                 }
             } catch (Exception abortTxnException) {
                 // just print a log if abort txn failed. This failure do not need to pass to user.
