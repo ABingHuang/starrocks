@@ -43,8 +43,26 @@ public class ShowMaterializedViewStmt extends ShowStmt {
 
     private String db;
 
+    private final String pattern;
+
+    private Expr where;
+
     public ShowMaterializedViewStmt(String db) {
         this.db = db;
+        this.pattern = null;
+        this.where = null;
+    }
+
+    public ShowMaterializedViewStmt(String db, String pattern) {
+        this.db = db;
+        this.pattern = pattern;
+        this.where = null;
+    }
+
+    public ShowMaterializedViewStmt(String db, Expr where) {
+        this.db = db;
+        this.pattern = null;
+        this.where = where;
     }
 
     public String getDb() {
