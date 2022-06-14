@@ -2843,11 +2843,17 @@ public class LocalMetastore implements ConnectorMetadata {
         // create partition info
         PartitionDesc partitionDesc = stmt.getPartitionExpDesc();
         PartitionInfo partitionInfo;
+        Map<String, Long> partitionNameToId = Maps.newHashMap();
         if (partitionDesc != null) {
-            Map<String, Long> partitionNameToId = Maps.newHashMap();
             partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
         } else {
+            long partitionId = getNextId();
+            partitionNameToId.put(mvName, partitionId);
             partitionInfo = new SinglePartitionInfo();
+            partitionInfo.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
+            partitionInfo.setReplicationNum(partitionId, (short) 1);
+            partitionInfo.setIsInMemory(partitionId, false);
+            partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
         }
         // create distribution info
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
@@ -2922,6 +2928,22 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException(e.getMessage());
         }
         boolean createMvSuccess;
+        Long version = null;
+        try {
+            version = PropertyAnalyzer.analyzeVersionInfo(properties);
+        } catch (AnalysisException e) {
+            throw new DdlException(e.getMessage());
+        }
+        Preconditions.checkNotNull(version);
+        Set<Long> tabletIdSet = new HashSet<Long>();
+        if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+            // this is a 1-level partitioned table, use table name as partition name
+            long partitionId = partitionNameToId.get(mvName);
+            Partition partition = createPartition(db, materializedView, partitionId, mvName, version, tabletIdSet);
+            buildPartitions(db, materializedView, Collections.singletonList(partition));
+            materializedView.addPartition(partition);
+        }
+
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
