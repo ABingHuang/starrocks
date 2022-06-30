@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.catalog;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
@@ -41,6 +42,10 @@ import java.util.Set;
  */
 public class MaterializedView extends OlapTable implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(MaterializedView.class);
+    private static ImmutableSet<TableType> supportedTableTypes = ImmutableSet.<TableType>builder()
+            .add(TableType.OLAP)
+            .add(TableType.HIVE)
+            .build();
 
     public enum RefreshType {
         SYNC,
@@ -310,5 +315,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         String json = Text.readString(in);
         MaterializedView mv = GsonUtils.GSON.fromJson(json, MaterializedView.class);
         return mv;
+    }
+
+    public static boolean isSupported(TableType tableType) {
+        return supportedTableTypes.contains(tableType);
     }
 }

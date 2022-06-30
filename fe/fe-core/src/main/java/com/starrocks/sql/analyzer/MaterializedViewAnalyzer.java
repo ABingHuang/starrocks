@@ -19,6 +19,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PrimitiveType;
@@ -120,10 +121,10 @@ public class MaterializedViewAnalyzer {
                     throw new SemanticException(
                             "Materialized view do not support table which is in other database:" + tableName.getDb());
                 }
-                if (!(table instanceof OlapTable)) {
+                if (!MaterializedView.isSupported(table.getType())) {
                     throw new SemanticException(
-                            "Materialized view only support olap table:" + tableName.getTbl() + " type:" +
-                                    table.getType().name());
+                            "Table:" + tableName.getTbl() + " type:" +
+                                    table.getType().name() + " is not supported to create materialized view");
                 }
                 baseTableIds.add(table.getId());
             });
