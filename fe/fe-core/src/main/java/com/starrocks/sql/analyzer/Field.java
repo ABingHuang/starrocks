@@ -5,8 +5,11 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Type;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class Field {
+    private static final Logger LOG = LogManager.getLogger(Field.class);
     private final String name;
     private Type type;
     //shadow column is not visible, eg. schema change column and materialized column
@@ -58,11 +61,15 @@ public class Field {
     }
 
     public boolean canResolve(SlotRef expr) {
+        LOG.info("slotref expr:" + expr.toSql() + ", name:" + name);
         TableName tableName = expr.getTblNameWithoutAnalyzed();
         if (tableName != null) {
+            LOG.info("tableName is:" + tableName.toSql());
             if (relationAlias == null) {
+                LOG.info("relationAlias is null");
                 return false;
             }
+            LOG.info("relationAlias is:" + relationAlias.toSql() + ", tableName:" + tableName.toSql());
             return relationAlias.getTbl().equals(expr.getTblNameWithoutAnalyzed().getTbl())
                     && expr.getColumnName().equalsIgnoreCase(this.name);
         } else {
