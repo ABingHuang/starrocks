@@ -37,6 +37,7 @@ public class TaskBuilder {
         Map<String, String> taskProperties = Maps.newHashMap();
         taskProperties.put(MvTaskRunProcessor.MV_ID, String.valueOf(materializedView.getId()));
         taskProperties.put(SessionVariable.ENABLE_INSERT_STRICT, "false");
+        taskProperties.put(SessionVariable.QUERY_TIMEOUT, "60000");
         task.setProperties(taskProperties);
         task.setDefinition(materializedView.getViewDefineSql());
         task.setExpireTime(0L);
