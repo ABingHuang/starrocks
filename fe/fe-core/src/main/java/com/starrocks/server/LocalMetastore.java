@@ -2919,6 +2919,20 @@ public class LocalMetastore implements ConnectorMetadata {
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         }
+        // process optHints
+        Map<String, String> optHints = null;
+        QueryRelation queryRelation = stmt.getQueryStatement().getQueryRelation();
+        if (queryRelation instanceof SelectRelation) {
+            SelectRelation selectRelation = (SelectRelation) queryRelation;
+            optHints = selectRelation.getSelectList().getOptHints();
+            if (optHints != null && !optHints.isEmpty()) {
+                SessionVariable sessionVariable = VariableMgr.newSessionVariable();
+                for (String key : optHints.keySet()) {
+                    VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(properties.get(key))), true);
+                }
+            }
+        }
+
         // set storage medium
         DataProperty dataProperty;
         try {
@@ -3000,18 +3014,9 @@ public class LocalMetastore implements ConnectorMetadata {
                     task.setSchedule(taskSchedule);
                     task.setType(Constants.TaskType.PERIODICAL);
                 }
-                QueryRelation queryRelation = stmt.getQueryStatement().getQueryRelation();
-                if (queryRelation instanceof SelectRelation) {
-                    SelectRelation selectRelation = (SelectRelation) queryRelation;
-                    Map<String, String> optHints = selectRelation.getSelectList().getOptHints();
-                    if (optHints != null && !optHints.isEmpty()) {
-                        SessionVariable sessionVariable = VariableMgr.newSessionVariable();
-                        for (String key : optHints.keySet()) {
-                            VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(properties.get(key))), true);
-                        }
-                        Map<String, String> taskProperties = task.getProperties();
-                        taskProperties.putAll(optHints);
-                    }
+                if (optHints != null) {
+                    Map<String, String> taskProperties = task.getProperties();
+                    taskProperties.putAll(optHints);
                 }
                 TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
                 taskManager.createTask(task, false);
