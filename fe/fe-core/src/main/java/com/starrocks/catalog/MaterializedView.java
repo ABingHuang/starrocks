@@ -488,6 +488,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         SlotRef slotRef = slotRefs.get(0);
         for (Long baseTableId : baseTableIds) {
             OlapTable olapTable = (OlapTable) database.getTable(baseTableId);
+            if (olapTable == null) {
+                LOG.warn("base table:{} does not exist in databse:{}", baseTableId, database.getFullName());
+                continue;
+            }
             if (slotRef.getTblNameWithoutAnalyzed().getTbl().equals(olapTable.getName())) {
                 return olapTable;
             }
