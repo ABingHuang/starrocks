@@ -459,7 +459,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 ((ExpressionRangePartitionInfo) partitionInfo).getRange(mvPartition.getId());
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         OlapTable baseTable = this.getPartitionTable(db);
-        Preconditions.checkState(baseTable != null);
+        if (baseTable == null) {
+            setActive(false);
+            return;
+        }
         PartitionInfo baseTablePartitionInfo = baseTable.getPartitionInfo();
         if (baseTablePartitionInfo instanceof SinglePartitionInfo) {
             Preconditions.checkState(baseTable.getPartitions().size() == 1);
