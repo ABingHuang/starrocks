@@ -63,9 +63,11 @@ import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.ReplacePartitionClause;
 import com.starrocks.analysis.RollupRenameClause;
+import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowAlterStmt;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TableRenameClause;
@@ -155,6 +157,8 @@ import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.Task;
@@ -164,7 +168,9 @@ import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.Backend;
@@ -2981,7 +2987,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         // NOTE: The materialized view  has been added to the database, and the following procedure cannot throw exception.
         if (createMvSuccess) {
-            if (materializedView.getRefreshScheme().getType() == MaterializedView.RefreshType.ASYNC) {
+            if (materializedView.getRefreshScheme().getType() != MaterializedView.RefreshType.SYNC) {
                 // create task
                 Task task = TaskBuilder.buildMvTask(materializedView, dbName);
                 MaterializedView.AsyncRefreshContext asyncRefreshContext =
@@ -2994,10 +3000,25 @@ public class LocalMetastore implements ConnectorMetadata {
                     task.setSchedule(taskSchedule);
                     task.setType(Constants.TaskType.PERIODICAL);
                 }
+                QueryRelation queryRelation = stmt.getQueryStatement().getQueryRelation();
+                if (queryRelation instanceof SelectRelation) {
+                    SelectRelation selectRelation = (SelectRelation) queryRelation;
+                    Map<String, String> optHints = selectRelation.getSelectList().getOptHints();
+                    if (optHints != null && !optHints.isEmpty()) {
+                        SessionVariable sessionVariable = VariableMgr.newSessionVariable();
+                        for (String key : optHints.keySet()) {
+                            VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(properties.get(key))), true);
+                        }
+                        Map<String, String> taskProperties = task.getProperties();
+                        taskProperties.putAll(optHints);
+                    }
+                }
                 TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
                 taskManager.createTask(task, false);
-                // run task
-                taskManager.executeTask(task.getName());
+                // for async type, run task
+                if (materializedView.getRefreshScheme().getType() == MaterializedView.RefreshType.MANUAL) {
+                    taskManager.executeTask(task.getName());
+                }
             }
         }
     }
