@@ -2928,7 +2928,7 @@ public class LocalMetastore implements ConnectorMetadata {
             if (optHints != null && !optHints.isEmpty()) {
                 SessionVariable sessionVariable = VariableMgr.newSessionVariable();
                 for (String key : optHints.keySet()) {
-                    VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(properties.get(key))), true);
+                    VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))), true);
                 }
             }
         }
