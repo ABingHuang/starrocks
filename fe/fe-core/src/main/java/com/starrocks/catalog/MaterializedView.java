@@ -202,8 +202,37 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     private String viewDefineSql;
 
     // record expression table column
+    // this field is deprecated because it contain the base table name.
+    // and it will be useless after base table is renamed
+    @Deprecated
     @SerializedName(value = "partitionRefTableExprs")
     private List<Expr> partitionRefTableExprs;
+
+    public static class PartitionExprInfo {
+        @SerializedName(value = "partitionExpr")
+        private Expr partitionExpr;
+
+        @SerializedName(value = "tableId")
+        private long tableId;
+
+        public PartitionExprInfo(Expr partitionExpr, long tableId) {
+            this.partitionExpr = partitionExpr;
+            this.tableId = tableId;
+        }
+
+        public Expr getPartitionExpr() {
+            return partitionExpr;
+        }
+
+        public long getTableId() {
+            return tableId;
+        }
+    }
+
+    // record partition exprs of base tables for materialized view
+    // which is used to calculate the partitions to refresh
+    @SerializedName(value = "partitionExprInfos")
+    private List<PartitionExprInfo> partitionExprInfos;
 
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
@@ -250,12 +279,23 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         this.baseTableIds = baseTableIds;
     }
 
+    /*
     public void setPartitionRefTableExprs(List<Expr> partitionRefTableExprs) {
         this.partitionRefTableExprs = partitionRefTableExprs;
     }
 
     public List<Expr> getPartitionRefTableExprs() {
         return partitionRefTableExprs;
+    }
+
+     */
+
+    public List<PartitionExprInfo> getPartitionExprInfos() {
+        return partitionExprInfos;
+    }
+
+    public void setPartitionExprInfos(List<PartitionExprInfo> partitionExprInfos) {
+        this.partitionExprInfos = partitionExprInfos;
     }
 
     public MvRefreshScheme getRefreshScheme() {

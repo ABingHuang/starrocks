@@ -268,11 +268,11 @@ public class MaterializedViewAnalyzer {
                         partitionRefTableExpr.setChild(i, refExpr);
                     }
                 }
-                statement.setPartitionRefTableExpr(partitionRefTableExpr);
+                statement.setRefTablePartitionExpr(partitionRefTableExpr);
             } else {
                 // e.g. partition by date_trunc('day',ss) or partition by ss
                 if (refExpr instanceof FunctionCallExpr || refExpr instanceof SlotRef) {
-                    statement.setPartitionRefTableExpr(refExpr);
+                    statement.setRefTablePartitionExpr(refExpr);
                 } else {
                     throw new SemanticException(
                             "Materialized view partition function must related with column");
@@ -281,7 +281,7 @@ public class MaterializedViewAnalyzer {
         }
 
         private void checkPartitionExpParams(CreateMaterializedViewStatement statement) {
-            Expr expr = statement.getPartitionRefTableExpr();
+            Expr expr = statement.getRefTablePartitionExpr();
             if (expr instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = ((FunctionCallExpr) expr);
                 String functionName = functionCallExpr.getFnName().getFunction();
@@ -300,8 +300,9 @@ public class MaterializedViewAnalyzer {
 
         private void checkPartitionColumnWithBaseTable(CreateMaterializedViewStatement statement,
                                                        Map<TableName, Table> tableNameTableMap) {
-            SlotRef slotRef = getSlotRef(statement.getPartitionRefTableExpr());
+            SlotRef slotRef = getSlotRef(statement.getRefTablePartitionExpr());
             Table table = tableNameTableMap.get(slotRef.getTblNameWithoutAnalyzed());
+            statement.setRefTableId(table.getId());
             PartitionInfo partitionInfo = ((OlapTable) table).getPartitionInfo();
             if (partitionInfo instanceof SinglePartitionInfo) {
                 throw new SemanticException("Materialized view partition column in partition exp " +

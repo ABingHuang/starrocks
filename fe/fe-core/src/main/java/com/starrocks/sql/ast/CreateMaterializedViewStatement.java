@@ -43,7 +43,8 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private Set<Long> baseTableIds;
     private Column partitionColumn;
     // record expression which related with partition by clause
-    private Expr partitionRefTableExpr;
+    private Expr refTablePartitionExpr;
+    private long refTableId;
 
     public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists, String comment,
                                            RefreshSchemeDesc refreshSchemeDesc, ExpressionPartitionDesc expressionPartitionDesc,
@@ -93,10 +94,6 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public ExpressionPartitionDesc getPartitionExpDesc() {
         return expressionPartitionDesc;
-    }
-
-    public void setPartitionExpDesc(ExpressionPartitionDesc expressionPartitionDesc) {
-        this.expressionPartitionDesc = expressionPartitionDesc;
     }
 
     public void setKeysType(KeysType keysType) {
@@ -163,12 +160,20 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.partitionColumn = partitionColumn;
     }
 
-    public Expr getPartitionRefTableExpr() {
-        return partitionRefTableExpr;
+    public Expr getRefTablePartitionExpr() {
+        return refTablePartitionExpr;
     }
 
-    public void setPartitionRefTableExpr(Expr partitionRefTableExpr) {
-        this.partitionRefTableExpr = partitionRefTableExpr;
+    public void setRefTablePartitionExpr(Expr refTablePartitionExpr) {
+        this.refTablePartitionExpr = refTablePartitionExpr;
+    }
+
+    public long getRefTableId() {
+        return refTableId;
+    }
+
+    public void setRefTableId(long refTableId) {
+        this.refTableId = refTableId;
     }
 
     @Override

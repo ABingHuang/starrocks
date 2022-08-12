@@ -87,6 +87,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.EsTable;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
@@ -3157,8 +3158,12 @@ public class LocalMetastore implements ConnectorMetadata {
         materializedView.setBaseTableIds(stmt.getBaseTableIds());
         // set viewDefineSql
         materializedView.setViewDefineSql(stmt.getInlineViewDef());
-        // set partitionRefTableExprs
-        materializedView.setPartitionRefTableExprs(Lists.newArrayList(stmt.getPartitionRefTableExpr()));
+        if (partitionInfo instanceof ExpressionRangePartitionInfo) {
+            // set partitionRefTableExprs
+            materializedView.setPartitionExprInfos(Lists.newArrayList(
+                    new MaterializedView.PartitionExprInfo(stmt.getRefTablePartitionExpr(), stmt.getRefTableId())));
+        }
+
         // set base index id
         long baseIndexId = getNextId();
         materializedView.setBaseIndexId(baseIndexId);

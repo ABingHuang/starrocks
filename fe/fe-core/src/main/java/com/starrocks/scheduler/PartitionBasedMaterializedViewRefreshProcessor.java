@@ -218,23 +218,21 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         }
     }
 
-    private Expr getPartitionExpr() {
-        ExpressionRangePartitionInfo expressionRangePartitionInfo =
-                ((ExpressionRangePartitionInfo) materializedView.getPartitionInfo());
-        // currently, mv only supports one expression
-        Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
-        return materializedView.getPartitionRefTableExprs().get(0);
+    private MaterializedView.PartitionExprInfo getPartitionExprInfo() {
+        Preconditions.checkState(materializedView.getPartitionExprInfos().size() == 1);
+        return materializedView.getPartitionExprInfos().get(0);
     }
 
     private Pair<OlapTable, Column> getPartitionTableAndColumn(Map<Long, OlapTable> olapTables) {
         List<SlotRef> slotRefs = Lists.newArrayList();
-        Expr partitionExpr = getPartitionExpr();
+        MaterializedView.PartitionExprInfo partitionExprInfo = getPartitionExprInfo();
+        Expr partitionExpr = partitionExprInfo.getPartitionExpr();
         partitionExpr.collect(SlotRef.class, slotRefs);
         // if partitionExpr is FunctionCallExpr, get first SlotRef
         Preconditions.checkState(slotRefs.size() == 1);
         SlotRef slotRef = slotRefs.get(0);
         for (OlapTable olapTable : olapTables.values()) {
-            if (slotRef.getTblNameWithoutAnalyzed().getTbl().equals(olapTable.getName())) {
+            if (olapTable.getId() == partitionExprInfo.getTableId()) {
                 return Pair.create(olapTable, olapTable.getColumn(slotRef.getColumnName()));
             }
         }
@@ -242,7 +240,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     }
 
     private void syncPartitionsForExpr() {
-        Expr partitionExpr = getPartitionExpr();
+        MaterializedView.PartitionExprInfo partitionExprInfo = getPartitionExprInfo();
+        Expr partitionExpr = partitionExprInfo.getPartitionExpr();
         Pair<OlapTable, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
         OlapTable partitionBaseTable = partitionTableAndColumn.first;
         Preconditions.checkNotNull(partitionBaseTable);
@@ -325,7 +324,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             // for non-partitioned materialized view
             needRefreshMvPartitionNames.addAll(materializedView.getPartitionNames());
         } else if (partitionInfo instanceof ExpressionRangePartitionInfo) {
-            Expr partitionExpr = getPartitionExpr();
+            MaterializedView.PartitionExprInfo partitionExprInfo = getPartitionExprInfo();
+            Expr partitionExpr = partitionExprInfo.getPartitionExpr();
             Pair<OlapTable, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
             OlapTable partitionTable = partitionTableAndColumn.first;
 

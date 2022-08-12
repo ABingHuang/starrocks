@@ -312,7 +312,7 @@ public class CreateMaterializedViewTest {
             Assert.assertEquals("k1", partitionSlotRef.getColumnName());
             Set<Long> baseTableIds = materializedView.getBaseTableIds();
             Assert.assertEquals(1, baseTableIds.size());
-            Expr partitionRefTableExpr = materializedView.getPartitionRefTableExprs().get(0);
+            Expr partitionRefTableExpr = materializedView.getPartitionExprInfos().get(0).getPartitionExpr();
             List<SlotRef> tableSlotRefs = Lists.newArrayList();
             partitionRefTableExpr.collect(SlotRef.class, tableSlotRefs);
             SlotRef slotRef = tableSlotRefs.get(0);
@@ -455,7 +455,7 @@ public class CreateMaterializedViewTest {
             Assert.assertEquals("s1", partitionSlotRef.getColumnName());
             Set<Long> baseTableIds = materializedView.getBaseTableIds();
             Assert.assertEquals(2, baseTableIds.size());
-            Expr partitionRefTableExpr = materializedView.getPartitionRefTableExprs().get(0);
+            Expr partitionRefTableExpr = materializedView.getPartitionExprInfos().get(0).getPartitionExpr();
             List<SlotRef> slotRefs = Lists.newArrayList();
             partitionRefTableExpr.collect(SlotRef.class, slotRefs);
             SlotRef slotRef = slotRefs.get(0);
