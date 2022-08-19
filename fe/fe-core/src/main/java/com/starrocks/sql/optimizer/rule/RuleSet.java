@@ -276,6 +276,10 @@ public class RuleSet {
                 new RewriteDuplicateAggregateFnRule()
         ));
 
+        rewriteRules.put(RuleSetType.AGGREGATE_REMOVE, ImmutableList.of(
+                new RewriteBitmapCountDistinctRule()
+        ));
+
         rewriteRules.put(RuleSetType.MULTI_DISTINCT_REWRITE, ImmutableList.of(
                 new RewriteMultiDistinctByCTERule(),
                 new RewriteMultiDistinctRule()
