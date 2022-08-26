@@ -162,6 +162,7 @@ public class LogicalJoinOperator extends LogicalOperator {
                 ", onPredicate = " + onPredicate + ' ' +
                 ", Predicate = " + predicate +
                 ", hashcode = " + hashCode() +
+                ", columnRefSet = " + getRequiredChildInputColumns() +
                 '}';
     }
 
