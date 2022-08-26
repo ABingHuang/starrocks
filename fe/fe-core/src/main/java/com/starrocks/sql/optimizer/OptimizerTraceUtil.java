@@ -248,6 +248,9 @@ public class OptimizerTraceUtil {
         @Override
         public String visitLogicalProject(LogicalProjectOperator node, Void context) {
             StringBuilder sb = new StringBuilder("LogicalProjectOperator {projection=");
+            sb.append("keys: ");
+            sb.append(new ArrayList<>(node.getColumnRefMap().keySet()));
+            sb.append(", values: ");
             sb.append(new ArrayList<>(node.getColumnRefMap().values()));
             sb.append("}");
             return sb.toString();
