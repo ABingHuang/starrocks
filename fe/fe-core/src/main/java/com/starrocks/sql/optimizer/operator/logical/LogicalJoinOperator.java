@@ -161,6 +161,7 @@ public class LogicalJoinOperator extends LogicalOperator {
                 joinType.toString() +
                 ", onPredicate = " + onPredicate + ' ' +
                 ", Predicate = " + predicate +
+                ", hashcode = " + hashCode() +
                 '}';
     }
 

@@ -65,6 +65,15 @@ public class LogicalValuesOperator extends LogicalOperator {
         return System.identityHashCode(this);
     }
 
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("LogicalValuesOperator{ ");
+        sb.append(columnRefSet);
+        sb.append("}");
+        return sb.toString();
+    }
+
     public static class Builder extends LogicalOperator.Builder<LogicalValuesOperator, LogicalValuesOperator.Builder> {
         private List<ColumnRefOperator> columnRefSet;
         private List<List<ScalarOperator>> rows;
