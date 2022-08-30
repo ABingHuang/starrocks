@@ -14,6 +14,7 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -32,7 +33,18 @@ public class MergeProjectWithChildRule extends TransformationRule {
         if (logicalProjectOperator.getColumnRefMap().isEmpty()) {
             return Lists.newArrayList(input.getInputs().get(0));
         }
+
         LogicalOperator child = (LogicalOperator) input.inputAt(0).getOp();
+        if (logicalProjectOperator.getColumnRefMap() != null) {
+            int size = logicalProjectOperator.getColumnRefMap().size();
+            long idTotal = 0;
+            if (size > 0) {
+                for (ColumnRefOperator refOperator : logicalProjectOperator.getColumnRefMap().keySet()) {
+                    long id = refOperator.getId();
+                    idTotal += id;
+                }
+            }
+        }
 
         ColumnRefSet projectColumns = logicalProjectOperator.getOutputColumns(
                 new ExpressionContext(input));
