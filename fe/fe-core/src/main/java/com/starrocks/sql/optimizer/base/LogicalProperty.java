@@ -30,6 +30,15 @@ public class LogicalProperty implements Property {
     // The flag for execute upon less than or equal one tablet
     private boolean isExecuteInOneTablet;
 
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("LogicalProperty{");
+        sb.append("outputColumns:" + outputColumns);
+        sb.append("}");
+        return sb.toString();
+    }
+
     public ColumnRefSet getOutputColumns() {
         return outputColumns;
     }
