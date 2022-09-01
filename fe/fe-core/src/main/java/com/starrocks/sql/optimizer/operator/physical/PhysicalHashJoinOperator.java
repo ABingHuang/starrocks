@@ -40,6 +40,8 @@ public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
                 ", joinPredicate=" + onPredicate +
                 ", limit=" + limit +
                 ", predicate=" + predicate +
+                projection != null ? "projection:"
+                + projection.getColumnRefMap().keySet() + ":" + projection.getColumnRefMap().values() : "" +
                 '}';
     }
 
