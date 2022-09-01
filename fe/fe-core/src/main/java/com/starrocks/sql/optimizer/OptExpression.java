@@ -161,6 +161,10 @@ public class OptExpression {
         if (groupExpression != null && groupExpression.getGroup() != null) {
             sb.append(", group:").append(groupExpression.getGroup().getId());
         }
+        ColumnRefSet outputColumns = getOutputColumns();
+        if (outputColumns != null) {
+            sb.append(", outputColumns:").append(outputColumns);
+        }
         sb.append('\n');
         String childHeadlinePrefix = detailPrefix + "->  ";
         String childDetailPrefix = detailPrefix + "    ";
