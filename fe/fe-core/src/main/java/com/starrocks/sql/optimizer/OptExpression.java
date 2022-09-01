@@ -111,6 +111,13 @@ public class OptExpression {
         return property.getOutputColumns();
     }
 
+    public ColumnRefSet getOutputColumns2() {
+        if (property == null) {
+            return null;
+        }
+        return property.getOutputColumns();
+    }
+
     public void setRequiredProperties(List<PhysicalPropertySet> requiredProperties) {
         this.requiredProperties = requiredProperties;
     }
@@ -161,7 +168,7 @@ public class OptExpression {
         if (groupExpression != null && groupExpression.getGroup() != null) {
             sb.append(", group:").append(groupExpression.getGroup().getId());
         }
-        ColumnRefSet outputColumns = getOutputColumns();
+        ColumnRefSet outputColumns = getOutputColumns2();
         if (outputColumns != null) {
             sb.append(", outputColumns:").append(outputColumns);
         }
