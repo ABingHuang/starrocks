@@ -13,6 +13,8 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.Binder;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
@@ -22,6 +24,7 @@ import java.util.List;
  * This class modify from CMU noisepage project TopDownRewrite class
  */
 public abstract class TopDownRewriteTask extends OptimizerTask {
+    private static final Logger LOG = LogManager.getLogger(TopDownRewriteTask.class);
     protected final Group group;
     protected final List<Rule> candidateRules;
 
@@ -65,6 +68,11 @@ public abstract class TopDownRewriteTask extends OptimizerTask {
                     // This group has been merged
                     if (group.getLogicalExpressions().isEmpty()) {
                         return;
+                    }
+                    OptExpression newExpression = new OptExpression(group.getFirstLogicalExpression());
+                    LOG.info("newExpression:" + newExpression.explain());
+                    if (group.getLogicalExpressions() != null) {
+                        LOG.info("group logical property:" + group.getLogicalExpressions());
                     }
 
                     context.incrementRewriteNum();

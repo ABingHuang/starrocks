@@ -149,6 +149,6 @@ public class Projection {
 
     @Override
     public String toString() {
-        return columnRefMap.values().toString();
+        return columnRefMap.keySet().toString() + ":" +columnRefMap.values().toString();
     }
 }
