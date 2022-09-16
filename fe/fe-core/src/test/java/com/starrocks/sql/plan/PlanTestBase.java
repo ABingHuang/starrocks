@@ -1340,7 +1340,7 @@ public class PlanTestBase {
                 writer.append(dump.trim());
             }
 
-            // writer.append("\n[end]\n\n");
+            writer.append("\n[end]\n\n");
             writer.flush();
         } catch (IOException e) {
             e.printStackTrace();
