@@ -1517,8 +1517,9 @@ public class LocalMetastore implements ConnectorMetadata {
             }
             tabletIdSet = olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
             try {
-                for (Long mvId : olapTable.getRelatedMaterializedViews()) {
-                    MaterializedView materializedView = (MaterializedView) db.getTable(mvId);
+                for (Long[] mvId : olapTable.getRelatedMaterializedViews()) {
+                    Preconditions.checkState(mvId.length == 2);
+                    MaterializedView materializedView = (MaterializedView) db.getTable(mvId[1]);
                     if (materializedView != null && materializedView.isLoadTriggeredRefresh()) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
                                 db.getFullName(), materializedView.getName(), Constants.TaskRunPriority.NORMAL.value());
@@ -3397,7 +3398,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
                     Table baseTable = baseTableInfo.getTable();
                     if (baseTable != null) {
-                        baseTable.removeRelatedMaterializedView(table.getId());
+                        Long[] ids = {db.getId(), table.getId()};
+                        baseTable.removeRelatedMaterializedView(ids);
                     }
                 }
             }
@@ -3523,8 +3525,9 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     private void disableMaterializedView(Database db, OlapTable olapTable) {
-        for (long mvId : olapTable.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) db.getTable(mvId);
+        for (Long[] mvId : olapTable.getRelatedMaterializedViews()) {
+            Preconditions.checkState(mvId.length == 2);
+            MaterializedView mv = (MaterializedView) db.getTable(mvId[1]);
             if (mv != null) {
                 mv.setActive(false);
             } else {
@@ -4295,11 +4298,11 @@ public class LocalMetastore implements ConnectorMetadata {
             editLog.logTruncateTable(info);
 
             // refresh mv
-            Set<Long> relatedMvs = olapTable.getRelatedMaterializedViews();
-            for (long mvId : relatedMvs) {
-                MaterializedView materializedView = (MaterializedView) db.getTable(mvId);
+            Set<Long[]> relatedMvs = olapTable.getRelatedMaterializedViews();
+            for (Long[] mvId : relatedMvs) {
+                MaterializedView materializedView = (MaterializedView) db.getTable(mvId[1]);
                 if (materializedView.isLoadTriggeredRefresh()) {
-                    refreshMaterializedView(db.getFullName(), db.getTable(mvId).getName(),
+                    refreshMaterializedView(db.getFullName(), db.getTable(mvId[1]).getName(),
                             Constants.TaskRunPriority.NORMAL.value());
                 }
             }
