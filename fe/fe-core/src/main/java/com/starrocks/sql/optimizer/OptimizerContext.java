@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.collect.Sets;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
@@ -9,9 +10,12 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.rule.RuleSet;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializationContext;
 import com.starrocks.sql.optimizer.task.SeriallyTaskScheduler;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
+
+import java.util.Set;
 
 public class OptimizerContext {
     private final Memo memo;
@@ -25,6 +29,8 @@ public class OptimizerContext {
     private TaskContext currentTaskContext;
     private OptimizerTraceInfo traceInfo;
 
+    private Set<MaterializationContext> candidateMvs;
+
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
         this.ruleSet = new RuleSet();
@@ -32,6 +38,7 @@ public class OptimizerContext {
         this.taskScheduler = SeriallyTaskScheduler.create();
         this.columnRefFactory = columnRefFactory;
         this.sessionVariable = VariableMgr.newSessionVariable();
+        this.candidateMvs = Sets.newHashSet();
     }
 
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory, ConnectContext connectContext) {
@@ -47,6 +54,7 @@ public class OptimizerContext {
         this.cteContext.setEnableCTE(sessionVariable.isCboCteReuse());
         this.cteContext.setInlineCTERatio(sessionVariable.getCboCTERuseRatio());
         this.cteContext.setMaxCTELimit(sessionVariable.getCboCTEMaxLimit());
+        this.candidateMvs = Sets.newHashSet();
     }
 
     public Memo getMemo() {
@@ -99,5 +107,13 @@ public class OptimizerContext {
 
     public OptimizerTraceInfo getTraceInfo() {
         return traceInfo;
+    }
+
+    public Set<MaterializationContext> getCandidateMvs() {
+        return candidateMvs;
+    }
+
+    public void addCandidateMvs(MaterializationContext candidateMv) {
+        this.candidateMvs.add(candidateMv);
     }
 }

@@ -125,7 +125,33 @@ public class Table extends MetaObject implements Writable {
 
     // not serialized field
     // record all materialized views based on this Table
-    private Set<Long> relatedMaterializedViews;
+    public static class MaterializedViewId {
+        private final long dbId;
+        private final long mvId;
+
+        public MaterializedViewId(long dbId, long mvId) {
+            this.dbId = dbId;
+            this.mvId = mvId;
+        }
+
+        public long getDbId() {
+            return dbId;
+        }
+
+        public long getMvId() {
+            return mvId;
+        }
+
+        @Override
+        public String toString() {
+            return "MaterializedViewId{" +
+                    "dbId=" + dbId +
+                    ", mvId=" + mvId +
+                    '}';
+        }
+    }
+
+    private Set<MaterializedViewId> relatedMaterializedViews;
 
     public Table(TableType type) {
         this.type = type;
@@ -507,16 +533,16 @@ public class Table extends MetaObject implements Writable {
     }
 
     // should call this when create materialized view
-    public void addRelatedMaterializedView(long mvId) {
+    public void addRelatedMaterializedView(MaterializedViewId mvId) {
         relatedMaterializedViews.add(mvId);
     }
 
     // should call this when drop materialized view
-    public void removeRelatedMaterializedView(long mvId) {
+    public void removeRelatedMaterializedView(MaterializedViewId mvId) {
         relatedMaterializedViews.remove(mvId);
     }
 
-    public Set<Long> getRelatedMaterializedViews() {
+    public Set<MaterializedViewId> getRelatedMaterializedViews() {
         return relatedMaterializedViews;
     }
 

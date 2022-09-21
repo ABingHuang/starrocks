@@ -78,6 +78,10 @@ public class QueryAnalyzer {
         new Visitor().process(node, new Scope(RelationId.anonymous(), new RelationFields()));
     }
 
+    public void analyze(ParseNode node) {
+        new Visitor().process(node, new Scope(RelationId.anonymous(), new RelationFields()));
+    }
+
     public void analyze(StatementBase node, Scope parent) {
         new Visitor().process(node, parent);
     }

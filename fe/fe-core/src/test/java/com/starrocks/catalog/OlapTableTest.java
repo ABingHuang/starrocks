@@ -80,14 +80,17 @@ public class OlapTableTest {
             for (Tablet tablet : newIndex.getTablets()) {
                 Assert.assertTrue(tablet instanceof LocalTablet);
             }
-            tbl.addRelatedMaterializedView(10L);
-            tbl.addRelatedMaterializedView(20L);
-            tbl.addRelatedMaterializedView(30L);
+            Table.MaterializedViewId mvId1 = new Table.MaterializedViewId(db.getId(), 10L);
+            tbl.addRelatedMaterializedView(mvId1);
+            Table.MaterializedViewId mvId2 = new Table.MaterializedViewId(db.getId(), 20L);
+            tbl.addRelatedMaterializedView(mvId2);
+            Table.MaterializedViewId mvId3 = new Table.MaterializedViewId(db.getId(), 30L);
+            tbl.addRelatedMaterializedView(mvId3);
             Assert.assertEquals(Sets.newHashSet(10L, 20L, 30L), tbl.getRelatedMaterializedViews());
-            tbl.removeRelatedMaterializedView(10L);
-            tbl.removeRelatedMaterializedView(20L);
+            tbl.removeRelatedMaterializedView(mvId1);
+            tbl.removeRelatedMaterializedView(mvId2);
             Assert.assertEquals(Sets.newHashSet(30L), tbl.getRelatedMaterializedViews());
-            tbl.removeRelatedMaterializedView(30L);
+            tbl.removeRelatedMaterializedView(mvId3);
             Assert.assertEquals(Sets.newHashSet(), tbl.getRelatedMaterializedViews());
         }
     }

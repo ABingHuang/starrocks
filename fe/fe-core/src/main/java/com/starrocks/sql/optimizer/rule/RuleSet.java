@@ -117,6 +117,16 @@ import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitAggregateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateFilterJoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateFilterScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateJoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.FilterJoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.FilterScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyJoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.ProjectionFilterJoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.ProjectionFilterScanRule;
 
 import java.util.List;
 import java.util.Map;
@@ -322,6 +332,14 @@ public class RuleSet {
                 new InlineOneCTEConsumeRule(),
                 new PruneCTEProduceRule()
         ));
+
+        REWRITE_RULES.put(RuleSetType.SINGLE_TABLE_MV_REWRITE, ImmutableList.of(
+                OnlyScanRule.getInstance(),
+                FilterScanRule.getInstance(),
+                ProjectionFilterScanRule.getInstance(),
+                AggregateScanRule.getInstance(),
+                AggregateFilterScanRule.getInstance()
+        ));
     }
 
     public RuleSet() {
@@ -337,6 +355,17 @@ public class RuleSet {
 
     public void addJoinCommutativityWithOutInnerRule() {
         transformRules.add(JoinCommutativityWithOutInnerRule.getInstance());
+    }
+
+    public void addMultiTableMvRewriteRule() {
+        // for join rewrite
+        transformRules.add(OnlyJoinRule.getInstance());
+        transformRules.add(FilterJoinRule.getInstance());
+        transformRules.add(ProjectionFilterJoinRule.getInstance());
+
+        // for aggregation rewrite
+        transformRules.add(AggregateJoinRule.getInstance());
+        transformRules.add(AggregateFilterJoinRule.getInstance());
     }
 
     public List<Rule> getTransformRules() {
