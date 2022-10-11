@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.GroupExpression;
@@ -10,13 +11,18 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerTraceInfo;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.Binder;
 import com.starrocks.sql.optimizer.rule.Rule;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * ApplyRuleTask firstly applies a rule, then
@@ -60,17 +66,29 @@ public class ApplyRuleTask extends OptimizerTask {
         Binder binder = new Binder(pattern, groupExpression);
         OptExpression extractExpr = binder.next();
         List<OptExpression> newExpressions = Lists.newArrayList();
+        int extractNum = 0;
         while (extractExpr != null) {
             if (!rule.check(extractExpr, context.getOptimizerContext())) {
                 extractExpr = binder.next();
                 continue;
             }
             List<OptExpression> targetExpressions = rule.transform(extractExpr, context.getOptimizerContext());
+
+            int newExpressionNum = 0;
+            for (OptExpression expression : targetExpressions) {
+                Map<ColumnRefOperator, ScalarOperator> projectionMap1 = getProjectionMap(expression,
+                        context.getOptimizerContext().getColumnRefFactory());
+                LOG.info("newExpressionNum:%d, rule:%s, projection:%s", newExpressionNum++, rule.type(), projectionMap1);
+            }
+
             newExpressions.addAll(targetExpressions);
 
             OptimizerTraceInfo traceInfo = context.getOptimizerContext().getTraceInfo();
             OptimizerTraceUtil.logApplyRule(sessionVariable, traceInfo, rule, extractExpr, targetExpressions);
 
+            Map<ColumnRefOperator, ScalarOperator> projectionMap = getProjectionMap(extractExpr,
+                    context.getOptimizerContext().getColumnRefFactory());
+            LOG.info("extractNum:%d, rule:%s, projection:%s", extractNum++, rule.type(), projectionMap);
             extractExpr = binder.next();
         }
 
@@ -98,5 +116,19 @@ public class ApplyRuleTask extends OptimizerTask {
         }
 
         groupExpression.setRuleExplored(rule);
+    }
+
+    Map<ColumnRefOperator, ScalarOperator> getProjectionMap(OptExpression expression, ColumnRefFactory columnRefFactory) {
+        if (expression.getOp().getProjection() != null) {
+            return expression.getOp().getProjection().getColumnRefMap();
+        } else {
+            Map<ColumnRefOperator, ScalarOperator> projectionMap = Maps.newHashMap();
+            ColumnRefSet columnRefSet = expression.getOutputColumns();
+            for (int columnId : columnRefSet.getColumnIds()) {
+                ColumnRefOperator columnRef = columnRefFactory.getColumnRef(columnId);
+                projectionMap.put(columnRef, columnRef);
+            }
+            return projectionMap;
+        }
     }
 }
