@@ -163,7 +163,7 @@ public class LogicalJoinOperator extends LogicalOperator {
                 ", Predicate = " + predicate +
                 ", hashcode = " + hashCode() +
                 ", columnRefSet = " + getRequiredChildInputColumns() +
-                projection != null ? "projection:"
+                projection != null && projection.getColumnRefMap() != null ? "projection:"
                 + projection.getColumnRefMap().keySet() + ":" + projection.getColumnRefMap().values() : "" +
                 '}';
     }
