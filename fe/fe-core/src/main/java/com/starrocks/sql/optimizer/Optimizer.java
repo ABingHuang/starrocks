@@ -313,16 +313,6 @@ public class Optimizer {
 
                 List<ColumnRefOperator> outputExpressions = mvQueryPlan.getOutputColumn();
                 mvContext.setScanMvOutputExpressions(outputExpressions);
-                // OptExpression root = mvQueryPlan.getRoot();
-                // the root op of mv must be a LogicalProjectOperator
-                /*
-                LogicalProjectOperator projectOperator = (LogicalProjectOperator) root.getOp();
-                Map<ColumnRefOperator, ScalarOperator> columnRefMap = projectOperator.getColumnRefMap();
-                for (ScalarOperator outputColumnRef : mvQueryPlan.getOutputColumn()) {
-                    outputExpressions.add(columnRefMap.get(outputColumnRef));
-                }
-
-                 */
             }
 
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
@@ -489,9 +479,8 @@ public class Optimizer {
             if (!mv.isActive()) {
                 continue;
             }
-            Set<String> partitionNamesToRefresh = Sets.newHashSet();
-
-            /*
+            // Set<String> partitionNamesToRefresh = Sets.newHashSet();
+            
             Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefresh();
             PartitionInfo partitionInfo = mv.getPartitionInfo();
             if (partitionInfo instanceof SinglePartitionInfo) {
@@ -503,8 +492,6 @@ public class Optimizer {
                 // then it can not be candidate
                 continue;
             }
-
-             */
 
             MaterializationContext materializationContext = mv.getMaterializationContext();
             if (materializationContext != null) {
