@@ -88,6 +88,7 @@ public class ApplyRuleTask extends OptimizerTask {
             }
             List<OptExpression> targetExpressions = rule.transform(extractExpr, context.getOptimizerContext());
 
+            /*
             int newExpressionNum = 0;
             for (OptExpression expression : targetExpressions) {
                 LOG.info("newExpressionNum:{}, rule:{}", newExpressionNum++, rule.type());
@@ -99,6 +100,8 @@ public class ApplyRuleTask extends OptimizerTask {
                         context.getOptimizerContext().getColumnRefFactory());
                 LOG.info("new expression projection:{}", projectionMap1);
             }
+
+             */
 
             newExpressions.addAll(targetExpressions);
 
@@ -137,7 +140,8 @@ public class ApplyRuleTask extends OptimizerTask {
         groupExpression.setRuleExplored(rule);
     }
 
-    Map<ColumnRefOperator, ScalarOperator> getProjectionMap(OptExpression expression, ColumnRefFactory columnRefFactory) {
+    private Map<ColumnRefOperator, ScalarOperator> getProjectionMap(OptExpression expression,
+                                                                    ColumnRefFactory columnRefFactory) {
         if (expression.getOp().getProjection() != null) {
             return expression.getOp().getProjection().getColumnRefMap();
         } else {

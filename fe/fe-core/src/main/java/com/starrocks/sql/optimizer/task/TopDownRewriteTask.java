@@ -3,13 +3,20 @@ package com.starrocks.sql.optimizer.task;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerTraceInfo;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.Binder;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -17,6 +24,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * TopDownRewriteTask performs a top-down rewrite logic operator pass.
@@ -32,6 +40,34 @@ public abstract class TopDownRewriteTask extends OptimizerTask {
         super(context);
         this.group = group;
         this.candidateRules = ruleSet;
+    }
+
+    private void deriveLogicalProperty(OptExpression root) {
+        if (!(root.getOp() instanceof LogicalOperator)) {
+            return;
+        }
+        for (OptExpression child : root.getInputs()) {
+            deriveLogicalProperty(child);
+        }
+
+        ExpressionContext context = new ExpressionContext(root);
+        context.deriveLogicalProperty();
+        root.setLogicalProperty(context.getRootProperty());
+    }
+
+    private Map<ColumnRefOperator, ScalarOperator> getProjectionMap(OptExpression expression,
+                                                                    ColumnRefFactory columnRefFactory) {
+        if (expression.getOp().getProjection() != null) {
+            return expression.getOp().getProjection().getColumnRefMap();
+        } else {
+            Map<ColumnRefOperator, ScalarOperator> projectionMap = Maps.newHashMap();
+            ColumnRefSet columnRefSet = expression.getOutputColumns();
+            for (int columnId : columnRefSet.getColumnIds()) {
+                ColumnRefOperator columnRef = columnRefFactory.getColumnRef(columnId);
+                projectionMap.put(columnRef, columnRef);
+            }
+            return projectionMap;
+        }
     }
 
     public void doExecute(boolean rewriteOnlyOnce) {
@@ -63,6 +99,19 @@ public abstract class TopDownRewriteTask extends OptimizerTask {
                         "Rewrite rule should provide at most 1 expression");
 
                 if (!newExpressions.isEmpty()) {
+
+                    int newExpressionNum = 0;
+                    for (OptExpression expression : targetExpressions) {
+                        LOG.info("newExpressionNum:{}, rule:{}", newExpressionNum++, rule.type());
+                        deriveLogicalProperty(expression);
+                        if (!(expression.getOp() instanceof LogicalOperator)) {
+                            continue;
+                        }
+                        Map<ColumnRefOperator, ScalarOperator> projectionMap1 = getProjectionMap(expression,
+                                context.getOptimizerContext().getColumnRefFactory());
+                        LOG.info("new expression projection:{}", projectionMap1);
+                    }
+
                     context.getOptimizerContext().getMemo().replaceRewriteExpression(
                             group, newExpressions.get(0));
                     // This group has been merged
