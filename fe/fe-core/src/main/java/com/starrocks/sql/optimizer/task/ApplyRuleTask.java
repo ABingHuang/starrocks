@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerTraceInfo;
@@ -53,6 +54,16 @@ public class ApplyRuleTask extends OptimizerTask {
                 "\n rule " + rule;
     }
 
+    private void deriveLogicalProperty(OptExpression root) {
+        for (OptExpression child : root.getInputs()) {
+            deriveLogicalProperty(child);
+        }
+
+        ExpressionContext context = new ExpressionContext(root);
+        context.deriveLogicalProperty();
+        root.setLogicalProperty(context.getRootProperty());
+    }
+
     @Override
     public void execute() {
         if (groupExpression.hasRuleExplored(rule) ||
@@ -75,7 +86,7 @@ public class ApplyRuleTask extends OptimizerTask {
 
             int newExpressionNum = 0;
             for (OptExpression expression : targetExpressions) {
-                expression.deriveLogicalPropertyItself();
+                deriveLogicalProperty(expression);
                 Map<ColumnRefOperator, ScalarOperator> projectionMap1 = getProjectionMap(expression,
                         context.getOptimizerContext().getColumnRefFactory());
                 LOG.info("newExpressionNum:{}, rule:{}, projection:{}", newExpressionNum++, rule.type(), projectionMap1);
