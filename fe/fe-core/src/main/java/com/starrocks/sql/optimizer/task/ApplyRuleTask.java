@@ -8,7 +8,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerTraceInfo;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -38,7 +37,7 @@ import java.util.Map;
  */
 
 public class ApplyRuleTask extends OptimizerTask {
-    private static final Logger LOG = LogManager.getLogger(Optimizer.class);
+    private static final Logger LOG = LogManager.getLogger(ApplyRuleTask.class);
     private final GroupExpression groupExpression;
     private final Rule rule;
 
@@ -76,6 +75,7 @@ public class ApplyRuleTask extends OptimizerTask {
 
             int newExpressionNum = 0;
             for (OptExpression expression : targetExpressions) {
+                expression.deriveLogicalPropertyItself();
                 Map<ColumnRefOperator, ScalarOperator> projectionMap1 = getProjectionMap(expression,
                         context.getOptimizerContext().getColumnRefFactory());
                 LOG.info("newExpressionNum:%d, rule:%s, projection:%s", newExpressionNum++, rule.type(), projectionMap1);
