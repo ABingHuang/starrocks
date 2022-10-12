@@ -78,7 +78,7 @@ public class ApplyRuleTask extends OptimizerTask {
                 expression.deriveLogicalPropertyItself();
                 Map<ColumnRefOperator, ScalarOperator> projectionMap1 = getProjectionMap(expression,
                         context.getOptimizerContext().getColumnRefFactory());
-                LOG.info("newExpressionNum:%d, rule:%s, projection:%s", newExpressionNum++, rule.type(), projectionMap1);
+                LOG.info("newExpressionNum:{}, rule:{}, projection:{}", newExpressionNum++, rule.type(), projectionMap1);
             }
 
             newExpressions.addAll(targetExpressions);
@@ -88,7 +88,7 @@ public class ApplyRuleTask extends OptimizerTask {
 
             Map<ColumnRefOperator, ScalarOperator> projectionMap = getProjectionMap(extractExpr,
                     context.getOptimizerContext().getColumnRefFactory());
-            LOG.info("extractNum:%d, rule:%s, projection:%s", extractNum++, rule.type(), projectionMap);
+            LOG.info("extractNum:{}, rule:{}, projection:%{}", extractNum++, rule.type(), projectionMap);
             extractExpr = binder.next();
         }
 
