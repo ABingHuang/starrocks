@@ -13,6 +13,7 @@ import com.starrocks.sql.optimizer.OptimizerTraceInfo;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -55,6 +56,9 @@ public class ApplyRuleTask extends OptimizerTask {
     }
 
     private void deriveLogicalProperty(OptExpression root) {
+        if (!(root.getOp() instanceof LogicalOperator)) {
+            return;
+        }
         for (OptExpression child : root.getInputs()) {
             deriveLogicalProperty(child);
         }
@@ -86,10 +90,14 @@ public class ApplyRuleTask extends OptimizerTask {
 
             int newExpressionNum = 0;
             for (OptExpression expression : targetExpressions) {
+                LOG.info("newExpressionNum:{}, rule:{}", newExpressionNum++, rule.type());
                 deriveLogicalProperty(expression);
+                if (!(expression.getOp() instanceof LogicalOperator)) {
+                    continue;
+                }
                 Map<ColumnRefOperator, ScalarOperator> projectionMap1 = getProjectionMap(expression,
                         context.getOptimizerContext().getColumnRefFactory());
-                LOG.info("newExpressionNum:{}, rule:{}, projection:{}", newExpressionNum++, rule.type(), projectionMap1);
+                LOG.info("new expression projection:{}", projectionMap1);
             }
 
             newExpressions.addAll(targetExpressions);
