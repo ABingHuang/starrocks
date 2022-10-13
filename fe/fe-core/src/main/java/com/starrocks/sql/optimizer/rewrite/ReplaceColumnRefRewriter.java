@@ -54,9 +54,18 @@ public class ReplaceColumnRefRewriter {
             // Rewiring predicate shouldn't change the origin project columnRefMap
 
             ScalarOperator mapperOperator = operatorMap.get(column).clone();
-            for (int i = 0; i < mapperOperator.getChildren().size() && isRecursively; ++i) {
-                mapperOperator.setChild(i, mapperOperator.getChild(i).accept(this, null));
+            if (isRecursively) {
+                if (mapperOperator.getChildren().isEmpty()) {
+                    while(operatorMap.containsKey(mapperOperator)) {
+                        mapperOperator = operatorMap.get(column).clone();
+                    }
+                } else {
+                    for (int i = 0; i < mapperOperator.getChildren().size(); ++i) {
+                        mapperOperator.setChild(i, mapperOperator.getChild(i).accept(this, null));
+                    }
+                }
             }
+
             return mapperOperator;
         }
     }
