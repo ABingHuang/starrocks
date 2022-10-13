@@ -55,14 +55,11 @@ public class ReplaceColumnRefRewriter {
 
             ScalarOperator mapperOperator = operatorMap.get(column).clone();
             if (isRecursively) {
-                if (mapperOperator.getChildren().isEmpty()) {
-                    while (operatorMap.containsKey(mapperOperator)) {
-                        mapperOperator = operatorMap.get(mapperOperator).clone();
-                    }
-                } else {
-                    for (int i = 0; i < mapperOperator.getChildren().size(); ++i) {
-                        mapperOperator.setChild(i, mapperOperator.getChild(i).accept(this, null));
-                    }
+                while (mapperOperator.getChildren().isEmpty() && operatorMap.containsKey(mapperOperator)) {
+                    mapperOperator = operatorMap.get(mapperOperator).clone();
+                }
+                for (int i = 0; i < mapperOperator.getChildren().size(); ++i) {
+                    mapperOperator.setChild(i, mapperOperator.getChild(i).accept(this, null));
                 }
             }
 
