@@ -136,7 +136,7 @@ public class Optimizer {
                 && Utils.countInnerJoinNodeSize(tree) < sessionVariable.getCboMaxReorderNode()) {
             if (Utils.countInnerJoinNodeSize(tree) > sessionVariable.getCboMaxReorderNodeUseExhaustive()) {
                 new ReorderJoinRule().transform(tree, context);
-                context.getRuleSet().addJoinCommutativityWithOutInnerRule();
+                // context.getRuleSet().addJoinCommutativityWithOutInnerRule();
             } else {
                 if (Utils.capableSemiReorder(tree, false, 0, sessionVariable.getCboMaxReorderNodeUseExhaustive())) {
                     context.getRuleSet().getTransformRules().add(new SemiReorderRule());
