@@ -56,7 +56,7 @@ public class ReplaceColumnRefRewriter {
             ScalarOperator mapperOperator = operatorMap.get(column).clone();
             if (isRecursively) {
                 if (mapperOperator.getChildren().isEmpty()) {
-                    while(operatorMap.containsKey(mapperOperator)) {
+                    while (operatorMap.containsKey(mapperOperator)) {
                         mapperOperator = operatorMap.get(column).clone();
                     }
                 } else {
