@@ -506,7 +506,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 active = false;
                 continue;
             }
-            MaterializedViewId mvId = new MaterializedViewId(db.getId(), id);
+            MvId mvId = new MvId(db.getId(), id);
             table.addRelatedMaterializedView(mvId);
         }
         if (partitionInfo instanceof SinglePartitionInfo) {

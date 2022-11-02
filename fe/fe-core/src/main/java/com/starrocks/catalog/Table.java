@@ -123,35 +123,7 @@ public class Table extends MetaObject implements Writable {
     @SerializedName(value = "comment")
     protected String comment = "";
 
-    // not serialized field
-    // record all materialized views based on this Table
-    public static class MaterializedViewId {
-        private final long dbId;
-        private final long mvId;
-
-        public MaterializedViewId(long dbId, long mvId) {
-            this.dbId = dbId;
-            this.mvId = mvId;
-        }
-
-        public long getDbId() {
-            return dbId;
-        }
-
-        public long getMvId() {
-            return mvId;
-        }
-
-        @Override
-        public String toString() {
-            return "MaterializedViewId{" +
-                    "dbId=" + dbId +
-                    ", mvId=" + mvId +
-                    '}';
-        }
-    }
-
-    private Set<MaterializedViewId> relatedMaterializedViews;
+    private Set<MvId> relatedMaterializedViews;
 
     public Table(TableType type) {
         this.type = type;
@@ -533,16 +505,16 @@ public class Table extends MetaObject implements Writable {
     }
 
     // should call this when create materialized view
-    public void addRelatedMaterializedView(MaterializedViewId mvId) {
+    public void addRelatedMaterializedView(MvId mvId) {
         relatedMaterializedViews.add(mvId);
     }
 
     // should call this when drop materialized view
-    public void removeRelatedMaterializedView(MaterializedViewId mvId) {
+    public void removeRelatedMaterializedView(MvId mvId) {
         relatedMaterializedViews.remove(mvId);
     }
 
-    public Set<MaterializedViewId> getRelatedMaterializedViews() {
+    public Set<MvId> getRelatedMaterializedViews() {
         return relatedMaterializedViews;
     }
 

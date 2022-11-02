@@ -13,6 +13,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -479,9 +480,9 @@ public class Optimizer {
 
     // get nested mvs by getting recursively
     void getRelatedMvs(List<Table> tablesToCheck, Set<MaterializedView> mvs) {
-        Set<Table.MaterializedViewId> newMvIds = Sets.newHashSet();
+        Set<MvId> newMvIds = Sets.newHashSet();
         for (Table table : tablesToCheck) {
-            Set<Table.MaterializedViewId> mvIds = table.getRelatedMaterializedViews();
+            Set<MvId> mvIds = table.getRelatedMaterializedViews();
             if (mvIds != null && !mvIds.isEmpty()) {
                 newMvIds.addAll(mvIds);
             }
@@ -490,7 +491,7 @@ public class Optimizer {
             return;
         }
         List<Table> newMvs = Lists.newArrayList();
-        for (Table.MaterializedViewId mvId : newMvIds) {
+        for (MvId mvId : newMvIds) {
             Database db = context.getCatalog().getDb(mvId.getDbId());
             if (db == null) {
                 continue;

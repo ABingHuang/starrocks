@@ -1892,7 +1892,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         // drop all temp partitions of this table, so that there is no temp partitions in recycle bin,
         // which make things easier.
         dropAllTempPartitions();
-        for (MaterializedViewId mvId : getRelatedMaterializedViews()) {
+        for (MvId mvId : getRelatedMaterializedViews()) {
             Table tmpTable = db.getTable(mvId.getMvId());
             if (tmpTable != null) {
                 MaterializedView mv = (MaterializedView) tmpTable;

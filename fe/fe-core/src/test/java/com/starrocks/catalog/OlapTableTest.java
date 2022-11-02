@@ -24,7 +24,6 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.IndexDef;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.FastByteArrayOutputStream;
@@ -80,11 +79,11 @@ public class OlapTableTest {
             for (Tablet tablet : newIndex.getTablets()) {
                 Assert.assertTrue(tablet instanceof LocalTablet);
             }
-            Table.MaterializedViewId mvId1 = new Table.MaterializedViewId(db.getId(), 10L);
+            MvId mvId1 = new MvId(db.getId(), 10L);
             tbl.addRelatedMaterializedView(mvId1);
-            Table.MaterializedViewId mvId2 = new Table.MaterializedViewId(db.getId(), 20L);
+            MvId mvId2 = new MvId(db.getId(), 20L);
             tbl.addRelatedMaterializedView(mvId2);
-            Table.MaterializedViewId mvId3 = new Table.MaterializedViewId(db.getId(), 30L);
+            MvId mvId3 = new MvId(db.getId(), 30L);
             tbl.addRelatedMaterializedView(mvId3);
             Assert.assertEquals(Sets.newHashSet(10L, 20L, 30L), tbl.getRelatedMaterializedViews());
             tbl.removeRelatedMaterializedView(mvId1);

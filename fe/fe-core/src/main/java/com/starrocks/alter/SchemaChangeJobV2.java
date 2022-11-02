@@ -39,6 +39,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -626,7 +627,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             return;
         }
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        for (com.starrocks.catalog.Table.MaterializedViewId mvId : tbl.getRelatedMaterializedViews()) {
+        for (MvId mvId : tbl.getRelatedMaterializedViews()) {
             MaterializedView mv = (MaterializedView) db.getTable(mvId.getMvId());
             if (mv == null) {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
