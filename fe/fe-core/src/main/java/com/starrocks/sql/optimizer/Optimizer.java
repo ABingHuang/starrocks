@@ -418,6 +418,11 @@ public class Optimizer {
             context.getRuleSet().addAutoJoinImplementationRule();
         }
 
+        if (!context.getCandidateMvs().isEmpty()
+                && connectContext.getSessionVariable().isEnableCostBasedMaterializedViewRewrite()) {
+            context.getRuleSet().addMultiTableMvRewriteRule();
+        }
+
         // add realtime mv rules
         if (sessionVariable.isMVPlanner() && sessionVariable.isEnableRealtimeRefreshMV()) {
             context.getRuleSet().addRealtimeMVRules();
