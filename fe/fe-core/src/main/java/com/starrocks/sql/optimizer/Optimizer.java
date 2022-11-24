@@ -7,6 +7,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -204,7 +205,14 @@ public class Optimizer {
 
     private void registerMaterializedViews(OptExpression logicOperatorTree, ConnectContext connectContext) {
         List<Table> tables = MvUtils.getAllTables(logicOperatorTree);
+        boolean hasExternalTable = tables.stream().anyMatch(table -> !table.isNativeTable());
 
+        if (hasExternalTable && !connectContext.getSessionVariable().isEnableExternalMvForceRewrite()) {
+            // for external tables, now we can guarantee the consistency of mv and base tables
+            // so add an session variable to control the rewrite
+            // if enable_external_mv_force_rewrite is false, we do not rewrite query by using mvs
+            return;
+        }
         // get all related materialized views, include nested mvs
         Set<MaterializedView> relatedMvs =
                 MvUtils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), tables);
@@ -213,16 +221,18 @@ public class Optimizer {
             if (!mv.isActive()) {
                 continue;
             }
-            Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefreshForMv();
-            PartitionInfo partitionInfo = mv.getPartitionInfo();
-            if (partitionInfo instanceof SinglePartitionInfo) {
-                if (!partitionNamesToRefresh.isEmpty()) {
+             if (!hasExternalTable) {
+                Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefreshForMv();
+                PartitionInfo partitionInfo = mv.getPartitionInfo();
+                if (partitionInfo instanceof SinglePartitionInfo) {
+                    if (!partitionNamesToRefresh.isEmpty()) {
+                        continue;
+                    }
+                } else if (partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
+                    // if the mv is partitioned, and all partitions need refresh,
+                    // then it can not be an candidate
                     continue;
                 }
-            } else if (partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
-                // if the mv is partitioned, and all partitions need refresh,
-                // then it can not be an candidate
-                continue;
             }
 
             // 1. build mv query logical plan

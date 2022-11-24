@@ -305,6 +305,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_COST_BASED_MATERIALIZED_VIEW_REWRITE =
             "enable_cost_based_materialized_view_rewrite";
 
+    public static final String ENABLE_EXTERNAL_MV_FORCE_REWRITE = "enable_external_mv_force_rewrite";
+
     public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
     public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
     public static final String BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD = "big_query_log_scan_bytes_threshold";
@@ -786,6 +788,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_COST_BASED_MATERIALIZED_VIEW_REWRITE)
     private boolean enableCostBasedMaterializedViewRewrite = true;
+
+    @VarAttr(name = ENABLE_EXTERNAL_MV_FORCE_REWRITE)
+    private boolean enableExternalMvForceRewrite = true;
 
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
@@ -1483,6 +1488,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableCostBasedMaterializedViewRewrite(boolean enableCostBasedMaterializedViewRewrite) {
         this.enableCostBasedMaterializedViewRewrite = enableCostBasedMaterializedViewRewrite;
+    }
+
+    public boolean isEnableExternalMvForceRewrite() {
+        return enableExternalMvForceRewrite;
+    }
+
+    public void setEnableExternalMvForceRewrite(boolean enableExternalMvForceRewrite) {
+        this.enableExternalMvForceRewrite = enableExternalMvForceRewrite;
     }
 
     // Serialize to thrift object
