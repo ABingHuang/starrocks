@@ -7,12 +7,16 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
@@ -42,6 +46,7 @@ public class MvRewriteOptimizationTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test");
+        FeConstants.runningUnitTest = true;
 
         Config.enable_experimental_mv = true;
 
@@ -132,6 +137,7 @@ public class MvRewriteOptimizationTest {
 
     @Test
     public void testSingleTableRewrite() throws Exception {
+        starRocksAssert.useDatabase("test");
         testSingleTableEqualPredicateRewrite();
         testSingleTableRangePredicateRewrite();
         testMultiMvsForSingleTable();
@@ -349,6 +355,7 @@ public class MvRewriteOptimizationTest {
 
     @Test
     public void testJoinMvRewrite() throws Exception {
+        starRocksAssert.useDatabase("test");
         createAndRefreshMv("test", "join_mv_1", "create materialized view join_mv_1" +
                 " distributed by hash(v1)" +
                 " as " +
@@ -550,6 +557,7 @@ public class MvRewriteOptimizationTest {
 
     @Test
     public void testAggregateMvRewrite() throws Exception {
+        starRocksAssert.useDatabase("test");
         createAndRefreshMv("test", "agg_join_mv_1", "create materialized view agg_join_mv_1" +
                 " distributed by hash(v1) as SELECT t0.v1 as v1," +
                 " test_all_type.t1d, sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
@@ -696,6 +704,7 @@ public class MvRewriteOptimizationTest {
 
     @Test
     public void testUnionRewrite() throws Exception {
+        starRocksAssert.useDatabase("test");
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         Table emps = getTable("test", "emps");
         PlanTestBase.setTableStatistics((OlapTable) emps, 1000000);
@@ -757,6 +766,23 @@ public class MvRewriteOptimizationTest {
                 " group by v1, test_all_type.t1d";
         getFragmentPlan(query3);
         dropMv("test", "join_agg_union_mv_1");
+    }
+
+    @Test
+    public void testMvOnExternalTable() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        MetadataMgr oldMetadataMgr = connectContext.getGlobalStateMgr().getMetadataMgr();
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+        createAndRefreshMv("test", "mv_on_external", "create materialized view mv_on_external " +
+                "distributed by hash(l_orderkey) buckets 10 " +
+                "refresh manual " +
+                "as select l_orderkey,l_partkey,l_shipdate from hive0.tpch.lineitem;");
+        MaterializedView mv = getMv("test", "mv_on_external");
+        Assert.assertNotNull(mv);
+        String query = "select l_orderkey,l_partkey,l_shipdate from hive0.tpch.lineitem";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "mv_on_external");
+        connectContext.getGlobalStateMgr().setMetadataMgr(oldMetadataMgr);
     }
 
     public String getFragmentPlan(String sql) throws Exception {
