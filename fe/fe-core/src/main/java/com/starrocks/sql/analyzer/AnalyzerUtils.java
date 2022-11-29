@@ -448,9 +448,6 @@ public class AnalyzerUtils {
                 ScalarType stringType = ScalarType.createVarcharType(len);
                 stringType.setAssignedStrLenInColDefinition();
                 newType = stringType;
-            } else if (PrimitiveType.FLOAT == srcType.getPrimitiveType() ||
-                    PrimitiveType.DOUBLE == srcType.getPrimitiveType()) {
-                newType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
             } else if (PrimitiveType.DECIMAL128 == srcType.getPrimitiveType() ||
                     PrimitiveType.DECIMAL64 == srcType.getPrimitiveType() ||
                     PrimitiveType.DECIMAL32 == srcType.getPrimitiveType()) {
