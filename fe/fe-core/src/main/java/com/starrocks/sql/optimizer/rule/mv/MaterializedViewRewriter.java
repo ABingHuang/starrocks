@@ -68,13 +68,17 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
 
         LogicalProjectOperator projectOperator = (LogicalProjectOperator) optExpression.getOp();
 
+        Map<ColumnRefOperator, ScalarOperator> replaceMap = new HashMap<>();
+        replaceMap.put(context.queryColumnRef, context.mvColumnRef);
+        ReplaceColumnRefRewriter replaceColumnRefRewriter = new ReplaceColumnRefRewriter(replaceMap);
         Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : projectOperator.getColumnRefMap().entrySet()) {
             if (kv.getValue().getUsedColumns().contains(context.queryColumnRef)) {
                 if (kv.getValue() instanceof ColumnRefOperator) {
                     newProjectMap.put(context.mvColumnRef, context.mvColumnRef);
                 } else {
-                    newProjectMap.put(kv.getKey(), context.mvColumnRef);
+                    ScalarOperator newValue = replaceColumnRefRewriter.rewrite(kv.getValue());
+                    newProjectMap.put(kv.getKey(), newValue);
                 }
             } else {
                 newProjectMap.put(kv.getKey(), kv.getValue());
@@ -181,6 +185,15 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
                     newAggMap.put(kv.getKey(), (CallOperator) replaceColumnRefRewriter.rewrite(callOperator));
                     break;
                 }
+            }
+            if (functionName.equals(FunctionSet.MULTI_DISTINCT_COUNT)
+                    && context.mvColumn.getAggregationType() == AggregateType.BITMAP_UNION) {
+                CallOperator callOperator = new CallOperator(FunctionSet.BITMAP_UNION_COUNT,
+                        kv.getValue().getType(),
+                        kv.getValue().getChildren(),
+                        Expr.getBuiltinFunction(FunctionSet.BITMAP_UNION_COUNT, new Type[] {Type.BITMAP},
+                                IS_IDENTICAL));
+                newAggMap.put(kv.getKey(), (CallOperator) replaceColumnRefRewriter.rewrite(callOperator));
             }
         }
         return OptExpression.create(new LogicalAggregationOperator(
