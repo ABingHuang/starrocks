@@ -679,6 +679,9 @@ public class MaterializedViewRule extends Rule {
                 keyColumns.union(factory.getColumnRef(columnToIds.get(column.getName())));
             } else {
                 aggregateColumns.union(factory.getColumnRef(columnToIds.get(column.getName())));
+                if (column.getRefColumn() != null) {
+                    aggregateColumns.union(factory.getColumnRef(columnToIds.get(column.getRefColumn().getColumnName())));
+                }
             }
         }
 
@@ -790,28 +793,39 @@ public class MaterializedViewRule extends Rule {
                     .collect(Collectors.toSet());
             for (int queryColumnId : queryColumnIds) {
                 if (!mvColumnIdSet.contains(queryColumnId)) {
+                    if (aggregateColumns.contains(queryColumnId)) {
+                        // queryColumn not in mvColumn, but in mvAggregateColumns, check AggregationFun match
+                        return isMatchMvAggFunction(indexId, mvColumnFnChild0.getUsedColumns().getFirstId(),
+                                queryColumnId, queryFnName, queryFn);
+                    }
                     return false;
                 }
             }
             return true;
         } else {
-            ColumnRefOperator queryColumnRef = factory.getColumnRef(queryFnChild0.getUsedColumns().getFirstId());
-            Column queryColumn = factory.getColumn(queryColumnRef);
-            ColumnRefOperator mvColumnRef = factory.getColumnRef(mvColumnFnChild0.getUsedColumns().getFirstId());
-            Column mvColumn = factory.getColumn(mvColumnRef);
-            if (factory.getRelationId(queryColumnRef.getId()).equals(factory.getRelationId(mvColumnRef.getId()))) {
-                if (mvColumn.getAggregationType() == null) {
-                    return false;
+            return isMatchMvAggFunction(indexId, mvColumnFnChild0.getUsedColumns().getFirstId(),
+                    queryFnChild0.getUsedColumns().getFirstId(), queryFnName, queryFn);
+        }
+    }
+
+    private boolean isMatchMvAggFunction(Long indexId, int mvColumnId, int queryColumnId, String queryFnName,
+                                         CallOperator queryFn) {
+        ColumnRefOperator queryColumnRef = factory.getColumnRef(queryColumnId);
+        Column queryColumn = factory.getColumn(queryColumnRef);
+        ColumnRefOperator mvColumnRef = factory.getColumnRef(mvColumnId);
+        Column mvColumn = factory.getColumn(mvColumnRef);
+        if (factory.getRelationId(queryColumnRef.getId()).equals(factory.getRelationId(mvColumnRef.getId()))) {
+            if (mvColumn.getAggregationType() == null) {
+                return false;
+            }
+            String mvColumnName = MVUtils.getMVColumnName(mvColumn, queryFnName, queryColumn.getName());
+            if (mvColumnName.equalsIgnoreCase(mvColumn.getName())) {
+                if (!rewriteContexts.containsKey(indexId)) {
+                    rewriteContexts.put(indexId, Lists.newArrayList());
                 }
-                String mvColumnName = MVUtils.getMVColumnName(mvColumn, queryFnName, queryColumn.getName());
-                if (mvColumnName.equalsIgnoreCase(mvColumn.getName())) {
-                    if (!rewriteContexts.containsKey(indexId)) {
-                        rewriteContexts.put(indexId, Lists.newArrayList());
-                    }
-                    rewriteContexts.get(indexId).add(new RewriteContext(
-                            queryFn, queryColumnRef, mvColumnRef, mvColumn));
-                    return true;
-                }
+                rewriteContexts.get(indexId).add(new RewriteContext(
+                        queryFn, queryColumnRef, mvColumnRef, mvColumn));
+                return true;
             }
         }
         return false;
