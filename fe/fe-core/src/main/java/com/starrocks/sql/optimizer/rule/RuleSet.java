@@ -403,6 +403,10 @@ public class RuleSet {
         transformRules.addAll(REWRITE_RULES.get(RuleSetType.MULTI_TABLE_MV_REWRITE));
     }
 
+    public void addPruneColumnsRules() {
+        transformRules.addAll(REWRITE_RULES.get(RuleSetType.PRUNE_COLUMNS));
+    }
+
     public List<Rule> getTransformRules() {
         return transformRules;
     }
