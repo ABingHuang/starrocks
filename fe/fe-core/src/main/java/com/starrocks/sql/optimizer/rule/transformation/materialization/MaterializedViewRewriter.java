@@ -319,7 +319,7 @@ public class MaterializedViewRewriter {
         // the predicate empid:1 < 10 can not be rewritten
         mvRefSets.except(scanOutputColumns);
         if (!ConstantOperator.TRUE.equals(equalPredicates)) {
-            equalPredicates = rewriteScalarOperatorToTarget(otherPredicates, queryExprMap, rewriteContext, mvRefSets, true);
+            equalPredicates = rewriteScalarOperatorToTarget(equalPredicates, queryExprMap, rewriteContext, mvRefSets, true);
         }
         if (!ConstantOperator.TRUE.equals(otherPredicates)) {
             otherPredicates = rewriteScalarOperatorToTarget(otherPredicates, queryExprMap, rewriteContext, mvRefSets, false);

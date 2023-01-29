@@ -403,7 +403,6 @@ public class Optimizer {
 
         if (!context.getCandidateMvs().isEmpty()
                 && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()) {
-            context.getRuleSet().addPruneColumnsRules();
             context.getRuleSet().addMultiTableMvRewriteRule();
         }
 
