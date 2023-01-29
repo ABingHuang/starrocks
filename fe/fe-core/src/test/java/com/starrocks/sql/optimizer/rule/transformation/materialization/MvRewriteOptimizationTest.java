@@ -274,6 +274,13 @@ public class MvRewriteOptimizationTest {
                 "     partitions=1/1\n" +
                 "     rollup: mv_1");
 
+        String query7 = "select empid, deptno from emps where empid = 5";
+        String plan7 = getCostsFragmentPlan(query7);
+        PlanTestBase.assertContains(plan7, "mv_1");
+        // column prune
+        PlanTestBase.assertNotContains(plan7, "name-->");
+        PlanTestBase.assertNotContains(plan7, "salary-->");
+
         connectContext.getSessionVariable().setEnableMaterializedViewRewrite(false);
         String query6 = "select empid, deptno, name, salary from emps where empid = 5";
         String plan6 = getFragmentPlan(query6);
@@ -640,6 +647,16 @@ public class MvRewriteOptimizationTest {
         String query11 = "select empid, depts.deptno from emps join depts using (deptno) where empid = 1";
         String plan11 = getFragmentPlan(query11);
         PlanTestBase.assertContains(plan11, "join_mv_3");
+        String costPlan2 = getFragmentPlan(query11);
+        PlanTestBase.assertContains(costPlan2, "join_mv_3");
+        PlanTestBase.assertNotContains(costPlan2, "name-->");
+        String newQuery11 = "select depts.deptno from emps join depts using (deptno) where empid = 1";
+        String costPlan3 = getCostsFragmentPlan(newQuery11);
+        PlanTestBase.assertContains(costPlan3, "join_mv_3");
+        // empid is kept for predicate
+        PlanTestBase.assertContains(costPlan3, "empid-->", "deptno-->");
+        // column prune
+        PlanTestBase.assertNotContains(costPlan3, "name-->");
 
         // output on equivalence classes
         String query12 = "select empid, emps.deptno from emps join depts using (deptno) where empid = 1";
