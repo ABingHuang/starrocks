@@ -49,7 +49,10 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             if (rewrittens != null && !rewrittens.isEmpty()) {
                 for (OptExpression rewritten : rewrittens) {
                     ColumnPrunner columnPrunner = new ColumnPrunner();
-                    results.add(columnPrunner.pruneColumns(rewritten));
+                    OptExpression exprAfterPrune = columnPrunner.pruneColumns(rewritten);
+                    if (exprAfterPrune != null) {
+                        results.add(exprAfterPrune);
+                    }
                 }
             }
         }

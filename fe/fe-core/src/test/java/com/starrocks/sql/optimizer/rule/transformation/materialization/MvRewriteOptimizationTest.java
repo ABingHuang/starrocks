@@ -556,6 +556,9 @@ public class MvRewriteOptimizationTest {
                 " from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 < 100";
         String plan1 = getFragmentPlan(query1);
         PlanTestBase.assertContains(plan1, "join_mv_1");
+        String costPlan1 = getCostsFragmentPlan(query1);
+        // column prune
+        PlanTestBase.assertNotContains(costPlan1, "t1d-->");
 
         // t1e is not the output of mv
         String query2 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c, test_all_type.t1e" +
@@ -1640,6 +1643,12 @@ public class MvRewriteOptimizationTest {
     public String getFragmentPlan(String sql) throws Exception {
         String s = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
                 getExplainString(TExplainLevel.NORMAL);
+        return s;
+    }
+
+    public String getCostsFragmentPlan(String sql) throws Exception {
+        String s = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
+                getExplainString(TExplainLevel.COSTS);
         return s;
     }
 

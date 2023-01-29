@@ -439,7 +439,9 @@ public class MaterializedViewRewriter {
                 .setProjection(projection)
                 .isUnionAll(true)
                 .build();
-        return OptExpression.create(unionOperator, newQueryInput, viewInput);
+        OptExpression result = OptExpression.create(unionOperator, newQueryInput, viewInput);
+        deriveLogicalProperty(result);
+        return result;
     }
 
     protected Multimap<ScalarOperator, ColumnRefOperator> normalizeAndReverseProjection(
