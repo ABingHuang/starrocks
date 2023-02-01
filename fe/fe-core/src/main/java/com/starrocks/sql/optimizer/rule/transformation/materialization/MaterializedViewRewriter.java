@@ -590,6 +590,10 @@ public class MaterializedViewRewriter {
                 continue;
             }
 
+            if (olapScanOperator.getSelectedPartitionId().size() == 0) {
+                return ConstantOperator.createBoolean(true);
+            }
+
             if (olapTable.getPartitionInfo() instanceof ExpressionRangePartitionInfo) {
                 ExpressionRangePartitionInfo partitionInfo = (ExpressionRangePartitionInfo) olapTable.getPartitionInfo();
                 Expr partitionExpr = partitionInfo.getPartitionExprs().get(0);

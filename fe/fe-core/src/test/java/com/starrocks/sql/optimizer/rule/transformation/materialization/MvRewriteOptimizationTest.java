@@ -231,6 +231,128 @@ public class MvRewriteOptimizationTest {
         testSingleTableResidualPredicateRewrite();
     }
 
+    @Test
+    public void testKaKao() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `km_a_da_day`( `ad_account_id` bigint,\n" +
+                "`campaign_type` string,\n" +
+                "`p_dt` DATE,\n" +
+                "`adunit_id` string,\n" +
+                "`dsp_placement` string,\n" +
+                "`campaign_id` string,\n" +
+                "`ad_group_id` string,\n" +
+                "`representative_id` string,\n" +
+                "`goal` string,\n" +
+                "`spending_method` string,\n" +
+                "`creative_format` string,\n" +
+                "`d_inventory` JSON,\n" +
+                "`d_ad` JSON,\n" +
+                "`d_user` JSON,\n" +
+                "`d_others` JSON,\n" +
+                "`win_amount` decimal(20,3),\n" +
+                "`amount` decimal(20,3),\n" +
+                "`dsp_cash_amount` decimal(20,7)," +
+                "`dsp_free_cash_amount` decimal(20,7)," +
+                " `served_impression_count` bigint," +
+                " `rendered_impression_count` bigint," +
+                " `viewable_impression_count` bigint," +
+                " `click_count` bigint," +
+                " `video_play_count` bigint," +
+                " `action_count` bigint," +
+                " `conversion_count` bigint," +
+                " `m_detail_count` JSON,\n" +
+                "`m_other_dec` JSON\n" +
+                ")\n" +
+                "DUPLICATE KEY (`ad_account_id`,`campaign_type`) PARTITION BY RANGE (`p_dt`)\n" +
+                "(\n" +
+                "START (\"2022-09-30\") END (\"2023-01-01\") EVERY (INTERVAL 1 day) )\n" +
+                "DISTRIBUTED BY HASH(`ad_account_id`) PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"colocate_with\" = \"groupa\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `km_a_msg_day`( `ad_account_id` bigint,\n" +
+                "`campaign_type` string,\n" +
+                "`p_dt` DATE,\n" +
+                "`dsp_placement` string,\n" +
+                "`campaign_id` string,\n" +
+                "`ad_group_id` string,\n" +
+                "`representative_id` string,\n" +
+                "`goal` string,\n" +
+                "`spending_method` string,\n" +
+                "`creative_format` string,\n" +
+                "`d_ad` JSON,\n" +
+                "`d_user` JSON,\n" +
+                "`d_others` JSON,\n" +
+                "`amount` decimal(20,3),\n" +
+                "`dsp_cash_amount` decimal(20,7)," +
+                " `dsp_free_cash_amount` decimal(20,7)," +
+                " `message_send_count` bigint," +
+                " `message_open_count` bigint," +
+                " `message_click_count` bigint," +
+                " `message_video_play_count` bigint\n" +
+                ")\n" +
+                "DUPLICATE KEY (`ad_account_id`,`campaign_type`) PARTITION BY RANGE (`p_dt`)\n" +
+                "(\n" +
+                "START (\"2022-09-30\") END (\"2022-12-31\") EVERY (INTERVAL 1 day) )\n" +
+                "DISTRIBUTED BY HASH(`ad_account_id`) PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"colocate_with\" = \"groupa\"\n" +
+                ");");
+
+        starRocksAssert.withMaterializedView("create materialized view mv_1 distributed by hash(`p_dt`) as" +
+                " SELECT\n" +
+                "    p_dt\n" +
+                "    , ad_account_id\n" +
+                "    , campaign_type\n" +
+                "    , sum(dsp_cash_amount) as sum_a\n" +
+                "    , sum(dsp_free_cash_amount) as sum_b\n" +
+                " FROM km_a_da_day " +
+                " group by p_dt, ad_account_id, campaign_type");
+
+        starRocksAssert.withMaterializedView("create materialized view mv_2 distributed by hash(`p_dt`) as" +
+                " SELECT\n" +
+                "    p_dt\n" +
+                "    , ad_account_id\n" +
+                "    , campaign_type\n" +
+                "    , sum(dsp_cash_amount) as sum_a\n" +
+                "    , sum(dsp_free_cash_amount) as sum_b\n" +
+                "    FROM km_a_msg_day " +
+                " group by p_dt, ad_account_id, campaign_type");
+
+        connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
+        String query = "select\n" +
+                "p_dt\n" +
+                ", ad_account_id\n" +
+                ", sum(dsp_cash_amount) paid_sales\n" +
+                ", sum(dsp_free_cash_amount) free_sales\n" +
+                "from (\n" +
+                "    SELECT\n" +
+                "    p_dt\n" +
+                "    , a.ad_account_id\n" +
+                "    , a.dsp_cash_amount\n" +
+                "    , a.dsp_free_cash_amount\n" +
+                "    FROM km_a_da_day a\n" +
+                "    WHERE p_dt =   '2022-12-15'\n" +
+                "        and a.campaign_type = 'DISPLAY'\n" +
+                "        \n" +
+                "    union all\n" +
+                "        \n" +
+                "    SELECT\n" +
+                "    p_dt\n" +
+                "    , a.ad_account_id\n" +
+                "    , a.dsp_cash_amount\n" +
+                "    , a.dsp_free_cash_amount\n" +
+                "    FROM km_a_msg_day a\n" +
+                "    WHERE p_dt =   '2022-12-15'\n" +
+                "        and a.campaign_type = 'DISPLAY'\n" +
+                ") z     \n" +
+                "group by p_dt , ad_account_id;";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "mv_1", "mv_2");
+        PlanTestBase.assertNotContains(plan, "mv_1");
+    }
+
     public void testSingleTableEqualPredicateRewrite() throws Exception {
         createAndRefreshMv("test", "mv_1",
                 "create materialized view mv_1 distributed by hash(empid)" +
