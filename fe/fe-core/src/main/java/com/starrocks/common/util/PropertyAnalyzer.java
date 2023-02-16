@@ -812,7 +812,7 @@ public class PropertyAnalyzer {
                 }
 
                 BaseTableInfo parentTableInfo;
-                if (catalogName == InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME) {
+                if (catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
                     parentTableInfo = new BaseTableInfo(parentDb.getId(), dbName, parentTable.getId());
                 } else {
                     parentTableInfo = new BaseTableInfo(catalogName, dbName, parentTable.getTableIdentifier());
