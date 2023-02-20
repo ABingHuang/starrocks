@@ -742,21 +742,21 @@ public class MaterializedViewRewriter {
         ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : columnRefMap.entrySet()) {
             ScalarOperator rewritten = rewriteContext.getMvColumnRefRewriter().rewrite(entry.getValue());
+            ScalarOperator rewriteScalarOp;
             if (isQueryAgainstView) {
-                ScalarOperator rewriteScalarOp;
                 if (isViewBased) {
                     rewriteScalarOp = columnRewriter.rewriteViewToQueryWithViewEc(rewritten);
                 } else {
                     rewriteScalarOp = columnRewriter.rewriteViewToQueryWithQueryEc(rewritten);
                 }
-                reversedMap.put(rewriteScalarOp, entry.getKey());
             } else {
-                ScalarOperator rewriteScalarOp;
                 if (isViewBased) {
                     rewriteScalarOp = columnRewriter.rewriteByViewEc(rewritten);
                 } else {
                     rewriteScalarOp = columnRewriter.rewriteByQueryEc(rewritten);
                 }
+            }
+            if (rewriteScalarOp != rewritten) {
                 reversedMap.put(rewriteScalarOp, entry.getKey());
             }
         }
