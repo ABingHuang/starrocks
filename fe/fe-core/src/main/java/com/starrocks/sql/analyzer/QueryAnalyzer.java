@@ -185,13 +185,19 @@ public class QueryAnalyzer {
             try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Analyzer.wholeSelect")) {
                 //Record aliases at this level to prevent alias conflicts
                 Set<TableName> aliasSet = new HashSet<>();
-                Relation resolvedRelation = resolveTableRef(selectRelation.getRelation(), scope, aliasSet);
+                Relation resolvedRelation;
+                try (PlannerProfile.ScopedTimer ignored2 = PlannerProfile.getScopedTimer("Analyzer.resolveTableRef")) {
+                    resolvedRelation = resolveTableRef(selectRelation.getRelation(), scope, aliasSet);
+                }
                 if (resolvedRelation instanceof TableFunctionRelation) {
                     throw unsupportedException("Table function must be used with lateral join");
                 }
                 selectRelation.setRelation(resolvedRelation);
-                Scope sourceScope = process(resolvedRelation, scope);
-                sourceScope.setParent(scope);
+                Scope sourceScope;
+                try (PlannerProfile.ScopedTimer ignored3 = PlannerProfile.getScopedTimer("Analyzer.processResolvedRelation")) {
+                    sourceScope = process(resolvedRelation, scope);
+                    sourceScope.setParent(scope);
+                }
 
                 try (PlannerProfile.ScopedTimer ignored2 = PlannerProfile.getScopedTimer("Analyzer.selectAnalysis")) {
                     SelectAnalyzer selectAnalyzer = new SelectAnalyzer(session);

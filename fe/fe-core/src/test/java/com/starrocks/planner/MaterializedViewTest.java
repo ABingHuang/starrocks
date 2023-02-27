@@ -1646,4 +1646,84 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 + "where emps.empid = 1";
         testRewriteOK(mv, query);
     }
+
+    @Test
+    public void testKakao() throws Exception {
+        String createTableSql = "CREATE TABLE IF NOT EXISTS km_a_da_day(\n" +
+                "    ad_account_id bigint,\n" +
+                "    dsp_placement string,\n" +
+                "    representative_id bigint,\n" +
+                "    campaign_type string,\n" +
+                "    p_dt DATE,\n" +
+                "    adunit_id string,\n" +
+                "    campaign_id bigint,\n" +
+                "    ad_group_id bigint,\n" +
+                "    goal string,\n" +
+                "    spending_method string,\n" +
+                "    creative_format string,\n" +
+                "    d_inventory JSON,\n" +
+                "    d_ad JSON,\n" +
+                "    d_user JSON,\n" +
+                "    d_others JSON,\n" +
+                "    win_amount decimal(20, 3),\n" +
+                "    amount decimal(20, 3),\n" +
+                "    dsp_cash_amount decimal(20, 7),\n" +
+                "    dsp_free_cash_amount decimal(20, 7),\n" +
+                "    served_impression_count bigint,\n" +
+                "    rendered_impression_count bigint,\n" +
+                "    viewable_impression_count bigint,\n" +
+                "    click_count bigint,\n" +
+                "    video_play_count bigint,\n" +
+                "    action_count bigint,\n" +
+                "    conversion_count bigint,\n" +
+                "    m_detail_count JSON,\n" +
+                "    m_other_dec JSON\n" +
+                ") \n" +
+                "DUPLICATE KEY (ad_account_id, dsp_placement, representative_id) \n" +
+                "PARTITION BY RANGE (p_dt) (START (\"2021-12-31\")END (\"2023-01-01\") EVERY (INTERVAL 1 day)) \n" +
+                "DISTRIBUTED BY HASH(ad_account_id) BUCKETS 120 \n" +
+                "PROPERTIES (\"replication_num\" = \"1\");";
+        starRocksAssert.withTable(createTableSql);
+
+        String mv = "select\n" +
+                "    p_dt\n" +
+                "    , 'MOMENT' as dsp\n" +
+                "    , (case\n" +
+                "        when dsp_placement = 'KAKAO_TALK' then 'TALK'\n" +
+                "        when dsp_placement = 'KAKAO_STORY' then 'STORY'\n" +
+                "        when dsp_placement = 'NETWORK' then 'GENERAL'\n" +
+                "        else dsp_placement\n" +
+                "    end) as placement\n" +
+                "    , (sum(if(d_inventory->'imp_condition' = 'WIN', served_impression_count, rendered_impression_count)))  as served\n" +
+                "    , (sum(rendered_impression_count)) as rendered\n" +
+                "    , (sum(viewable_impression_count)) as viewable\n" +
+                "    , (sum(if(d_inventory->'imp_condition' = 'WIN', served_impression_count, rendered_impression_count))) as impression\n" +
+                "    , (sum(click_count)) as click\n" +
+                "    , (sum(dsp_cash_amount + dsp_free_cash_amount)) as sales\n" +
+                "    , (sum(dsp_cash_amount)) as paid_sales\n" +
+                "    , (sum(dsp_free_cash_amount)) as free_sales\n" +
+                "    , count ( distinct case when dsp_cash_amount + dsp_free_cash_amount != 0 then   ad_account_id else null end) sales_ad_account_count\n" +
+                "    , count ( distinct case when dsp_cash_amount != 0 then   ad_account_id else null end) paid_sales_ad_account\n" +
+                "    , count ( distinct case when dsp_free_cash_amount != 0 then   ad_account_id else null end) free_sales_ad_account\n" +
+                "from km_a_da_day\n" +
+                "group by p_dt, case\n" +
+                "    when dsp_placement = 'KAKAO_TALK' then 'TALK'\n" +
+                "    when dsp_placement = 'KAKAO_STORY' then 'STORY'\n" +
+                "    when dsp_placement = 'NETWORK' then 'GENERAL'\n" +
+                "    else dsp_placement\n" +
+                "    end;";
+
+        String query = "select\n" +
+                " adunit_id , ad_account_id , campaign_id , ad_group_id , representative_id , campaign_type , goal , spending_method\n" +
+                "  , creative_format , cast(d_inventory->'imp_condition' as string) as imp_condition, cast(d_inventory->'is_expandable' as string) as is_expandable \n" +
+                "  , cast(d_inventory->'imp_type' as string) as imp_type, cast(d_ad->'bid_strategy' as string) as bid_strategy, cast(d_ad->'expandable_format' as string) as expandable_format\n" +
+                "  , cast(d_user->'location' as string) as `location`, cast(d_user->'sdk_type' as string) as sdk_type, cast(d_user->'device_class' as string) as device_class\n" +
+                "  , cast(d_user->'age_band' as string) as age_band, cast(d_user->'gender' as string) as gender\n" +
+                "  , sum(viewable_impression_count) vimp\n" +
+                "from km_a_da_day\n" +
+                "where p_dt = '2022-12-25'\n" +
+                "group by adunit_id , ad_account_id , campaign_id , ad_group_id , representative_id , campaign_type , goal , spending_method\n" +
+                "  , creative_format , imp_condition, is_expandable, imp_type, bid_strategy, expandable_format, `location`, sdk_type, device_class, age_band, gender order by vimp limit 100";
+        testRewriteOK(mv, query);
+    }
 }
