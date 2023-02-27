@@ -19,6 +19,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -343,7 +344,10 @@ public class Analyzer {
 
         @Override
         public Void visitQueryStatement(QueryStatement stmt, ConnectContext session) {
-            new QueryAnalyzer(session).analyze(stmt);
+            try (PlannerProfile.ScopedTimer ignored =
+                         PlannerProfile.getScopedTimer("Analyzer.queryAnalyzer")) {
+                new QueryAnalyzer(session).analyze(stmt);
+            }
 
             QueryRelation queryRelation = stmt.getQueryRelation();
             long selectLimit = session.getSessionVariable().getSqlSelectLimit();

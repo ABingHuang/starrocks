@@ -127,51 +127,53 @@ public class QueryAnalyzer {
 
         private Scope analyzeCTE(QueryRelation stmt, Scope scope) {
             Scope cteScope = new Scope(RelationId.anonymous(), new RelationFields());
-            cteScope.setParent(scope);
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Analyzer.cteAnalysis")) {
+                cteScope.setParent(scope);
 
-            if (!stmt.hasWithClause()) {
-                return cteScope;
-            }
-
-            for (CTERelation withQuery : stmt.getCteRelations()) {
-                QueryRelation query = withQuery.getCteQueryStatement().getQueryRelation();
-                process(withQuery.getCteQueryStatement(), cteScope);
-                String cteName = withQuery.getName();
-                if (cteScope.containsCTE(cteName)) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE, cteName);
+                if (!stmt.hasWithClause()) {
+                    return cteScope;
                 }
 
-                if (withQuery.getColumnOutputNames() == null) {
-                    withQuery.setColumnOutputNames(new ArrayList<>(query.getColumnOutputNames()));
-                } else {
-                    if (withQuery.getColumnOutputNames().size() != query.getColumnOutputNames().size()) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_VIEW_WRONG_LIST);
+                for (CTERelation withQuery : stmt.getCteRelations()) {
+                    QueryRelation query = withQuery.getCteQueryStatement().getQueryRelation();
+                    process(withQuery.getCteQueryStatement(), cteScope);
+                    String cteName = withQuery.getName();
+                    if (cteScope.containsCTE(cteName)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE, cteName);
                     }
+
+                    if (withQuery.getColumnOutputNames() == null) {
+                        withQuery.setColumnOutputNames(new ArrayList<>(query.getColumnOutputNames()));
+                    } else {
+                        if (withQuery.getColumnOutputNames().size() != query.getColumnOutputNames().size()) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_VIEW_WRONG_LIST);
+                        }
+                    }
+
+                    /*
+                     * use cte column name as output scope of subquery relation fields
+                     */
+                    ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
+                    for (int fieldIdx = 0; fieldIdx < query.getRelationFields().getAllFields().size(); ++fieldIdx) {
+                        Field originField = query.getRelationFields().getFieldByIndex(fieldIdx);
+
+                        String database = originField.getRelationAlias() == null ? session.getDatabase() :
+                                originField.getRelationAlias().getDb();
+                        TableName tableName = new TableName(database, cteName);
+                        outputFields.add(
+                                new Field(withQuery.getColumnOutputNames().get(fieldIdx), originField.getType(), tableName,
+                                        originField.getOriginExpression()));
+                    }
+
+                    /*
+                     *  Because the analysis of CTE is sensitive to order
+                     *  the later CTE can call the previous resolved CTE,
+                     *  and the previous CTE can rewrite the existing table name.
+                     *  So here will save an increasing AnalyzeState to add cte scope
+                     */
+                    withQuery.setScope(new Scope(RelationId.of(withQuery), new RelationFields(outputFields.build())));
+                    cteScope.addCteQueries(cteName, withQuery);
                 }
-
-                /*
-                 * use cte column name as output scope of subquery relation fields
-                 */
-                ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
-                for (int fieldIdx = 0; fieldIdx < query.getRelationFields().getAllFields().size(); ++fieldIdx) {
-                    Field originField = query.getRelationFields().getFieldByIndex(fieldIdx);
-
-                    String database = originField.getRelationAlias() == null ? session.getDatabase() :
-                            originField.getRelationAlias().getDb();
-                    TableName tableName = new TableName(database, cteName);
-                    outputFields.add(
-                            new Field(withQuery.getColumnOutputNames().get(fieldIdx), originField.getType(), tableName,
-                                    originField.getOriginExpression()));
-                }
-
-                /*
-                 *  Because the analysis of CTE is sensitive to order
-                 *  the later CTE can call the previous resolved CTE,
-                 *  and the previous CTE can rewrite the existing table name.
-                 *  So here will save an increasing AnalyzeState to add cte scope
-                 */
-                withQuery.setScope(new Scope(RelationId.of(withQuery), new RelationFields(outputFields.build())));
-                cteScope.addCteQueries(cteName, withQuery);
             }
 
             return cteScope;
@@ -180,31 +182,33 @@ public class QueryAnalyzer {
         @Override
         public Scope visitSelect(SelectRelation selectRelation, Scope scope) {
             AnalyzeState analyzeState = new AnalyzeState();
-            //Record aliases at this level to prevent alias conflicts
-            Set<TableName> aliasSet = new HashSet<>();
-            Relation resolvedRelation = resolveTableRef(selectRelation.getRelation(), scope, aliasSet);
-            if (resolvedRelation instanceof TableFunctionRelation) {
-                throw unsupportedException("Table function must be used with lateral join");
-            }
-            selectRelation.setRelation(resolvedRelation);
-            Scope sourceScope = process(resolvedRelation, scope);
-            sourceScope.setParent(scope);
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Analyzer.wholeSelect")) {
+                //Record aliases at this level to prevent alias conflicts
+                Set<TableName> aliasSet = new HashSet<>();
+                Relation resolvedRelation = resolveTableRef(selectRelation.getRelation(), scope, aliasSet);
+                if (resolvedRelation instanceof TableFunctionRelation) {
+                    throw unsupportedException("Table function must be used with lateral join");
+                }
+                selectRelation.setRelation(resolvedRelation);
+                Scope sourceScope = process(resolvedRelation, scope);
+                sourceScope.setParent(scope);
 
-            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Analyzer.selectAnalysis")) {
-                SelectAnalyzer selectAnalyzer = new SelectAnalyzer(session);
-                selectAnalyzer.analyze(
-                        analyzeState,
-                        selectRelation.getSelectList(),
-                        selectRelation.getRelation(),
-                        sourceScope,
-                        selectRelation.getGroupByClause(),
-                        selectRelation.getHavingClause(),
-                        selectRelation.getWhereClause(),
-                        selectRelation.getOrderBy(),
-                        selectRelation.getLimit());
-            }
+                try (PlannerProfile.ScopedTimer ignored2 = PlannerProfile.getScopedTimer("Analyzer.selectAnalysis")) {
+                    SelectAnalyzer selectAnalyzer = new SelectAnalyzer(session);
+                    selectAnalyzer.analyze(
+                            analyzeState,
+                            selectRelation.getSelectList(),
+                            selectRelation.getRelation(),
+                            sourceScope,
+                            selectRelation.getGroupByClause(),
+                            selectRelation.getHavingClause(),
+                            selectRelation.getWhereClause(),
+                            selectRelation.getOrderBy(),
+                            selectRelation.getLimit());
+                }
 
-            selectRelation.fillResolvedAST(analyzeState);
+                selectRelation.fillResolvedAST(analyzeState);
+            }
             return analyzeState.getOutputScope();
         }
 
@@ -307,47 +311,49 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitTable(TableRelation node, Scope outerScope) {
-            TableName tableName = node.getResolveTableName();
-            Table table = node.getTable();
-
             ImmutableList.Builder<Field> fields = ImmutableList.builder();
-            ImmutableMap.Builder<Field, Column> columns = ImmutableMap.builder();
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Analyzer.tableAnalysis")) {
+                TableName tableName = node.getResolveTableName();
+                Table table = node.getTable();
 
-            List<Column> fullSchema = node.isBinlogQuery()
-                    ? appendBinlogMetaColumns(table.getFullSchema()) : table.getFullSchema();
-            List<Column> baseSchema = node.isBinlogQuery()
-                    ? appendBinlogMetaColumns(table.getBaseSchema()) : table.getBaseSchema();
-            for (Column column : fullSchema) {
-                Field field;
-                if (baseSchema.contains(column)) {
-                    field = new Field(column.getName(), column.getType(), tableName,
-                            new SlotRef(tableName, column.getName(), column.getName()), true);
-                } else {
-                    field = new Field(column.getName(), column.getType(), tableName,
+                ImmutableMap.Builder<Field, Column> columns = ImmutableMap.builder();
 
-                            new SlotRef(tableName, column.getName(), column.getName()), false);
+                List<Column> fullSchema = node.isBinlogQuery()
+                        ? appendBinlogMetaColumns(table.getFullSchema()) : table.getFullSchema();
+                List<Column> baseSchema = node.isBinlogQuery()
+                        ? appendBinlogMetaColumns(table.getBaseSchema()) : table.getBaseSchema();
+                for (Column column : fullSchema) {
+                    Field field;
+                    if (baseSchema.contains(column)) {
+                        field = new Field(column.getName(), column.getType(), tableName,
+                                new SlotRef(tableName, column.getName(), column.getName()), true);
+                    } else {
+                        field = new Field(column.getName(), column.getType(), tableName,
+
+                                new SlotRef(tableName, column.getName(), column.getName()), false);
+                    }
+                    columns.put(field, column);
+                    fields.add(field);
                 }
-                columns.put(field, column);
-                fields.add(field);
-            }
 
-            node.setColumns(columns.build());
-            String dbName = node.getName().getDb();
+                node.setColumns(columns.build());
+                String dbName = node.getName().getDb();
 
-            session.getDumpInfo().addTable(dbName, table);
-            if (table.isHiveTable()) {
-                HiveTable hiveTable = (HiveTable) table;
-                Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().
-                        getResource(hiveTable.getResourceName());
-                if (resource != null) {
-                    session.getDumpInfo().addResource(resource);
+                session.getDumpInfo().addTable(dbName, table);
+                if (table.isHiveTable()) {
+                    HiveTable hiveTable = (HiveTable) table;
+                    Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().
+                            getResource(hiveTable.getResourceName());
+                    if (resource != null) {
+                        session.getDumpInfo().addResource(resource);
+                    }
+                    session.getDumpInfo().addHMSTable(hiveTable.getResourceName(), hiveTable.getDbName(),
+                            hiveTable.getTableName());
+                    HiveMetaStoreTableDumpInfo hiveMetaStoreTableDumpInfo = session.getDumpInfo().getHMSTable(
+                            hiveTable.getResourceName(), hiveTable.getDbName(), hiveTable.getTableName());
+                    hiveMetaStoreTableDumpInfo.setPartColumnNames(hiveTable.getPartitionColumnNames());
+                    hiveMetaStoreTableDumpInfo.setDataColumnNames(hiveTable.getDataColumnNames());
                 }
-                session.getDumpInfo().addHMSTable(hiveTable.getResourceName(), hiveTable.getDbName(),
-                        hiveTable.getTableName());
-                HiveMetaStoreTableDumpInfo hiveMetaStoreTableDumpInfo = session.getDumpInfo().getHMSTable(
-                        hiveTable.getResourceName(), hiveTable.getDbName(), hiveTable.getTableName());
-                hiveMetaStoreTableDumpInfo.setPartColumnNames(hiveTable.getPartitionColumnNames());
-                hiveMetaStoreTableDumpInfo.setDataColumnNames(hiveTable.getDataColumnNames());
             }
 
             Scope scope = new Scope(RelationId.of(node), new RelationFields(fields.build()));
