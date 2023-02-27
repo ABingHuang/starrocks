@@ -39,6 +39,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
@@ -314,30 +315,40 @@ public class MvUtils {
                                                                                ColumnRefFactory columnRefFactory,
                                                                                ConnectContext connectContext) {
         StatementBase mvStmt;
-        try {
-            List<StatementBase> statementBases =
-                    com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable());
-            Preconditions.checkState(statementBases.size() == 1);
-            mvStmt = statementBases.get(0);
-        } catch (ParsingException parsingException) {
-            LOG.warn("parse sql:{} failed", sql, parsingException);
-            return null;
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.mvParserTime")) {
+            try {
+                List<StatementBase> statementBases =
+                        com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable());
+                Preconditions.checkState(statementBases.size() == 1);
+                mvStmt = statementBases.get(0);
+            } catch (ParsingException parsingException) {
+                LOG.warn("parse sql:{} failed", sql, parsingException);
+                return null;
+            }
         }
         Preconditions.checkState(mvStmt instanceof QueryStatement);
-        Analyzer.analyze(mvStmt, connectContext);
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.mvAnalyzeTimer")) {
+            Analyzer.analyze(mvStmt, connectContext);
+        }
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
-        LogicalPlan logicalPlan =
-                new RelationTransformer(columnRefFactory, connectContext).transformWithSelectLimit(query);
+        LogicalPlan logicalPlan;
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.mvTransformerTimer")) {
+            logicalPlan =
+                    new RelationTransformer(columnRefFactory, connectContext).transformWithSelectLimit(query);
+        }
         // optimize the sql by rule and disable rule based materialized view rewrite
         OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
         optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
         Optimizer optimizer = new Optimizer(optimizerConfig);
-        OptExpression optimizedPlan = optimizer.optimize(
-                connectContext,
-                logicalPlan.getRoot(),
-                new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()),
-                columnRefFactory);
+        OptExpression optimizedPlan;
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.mvOptimizationTimer")) {
+            optimizedPlan = optimizer.optimize(
+                    connectContext,
+                    logicalPlan.getRoot(),
+                    new PhysicalPropertySet(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()),
+                    columnRefFactory);
+        }
         return Pair.create(optimizedPlan, logicalPlan);
     }
 

@@ -30,6 +30,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -53,17 +54,22 @@ public class MaterializedViewOptimizer {
                                   ColumnRefFactory columnRefFactory,
                                   ConnectContext connectContext,
                                   Set<String> mvPartitionNamesToRefresh) {
-        String mvSql = mv.getViewDefineSql();
-        Pair<OptExpression, LogicalPlan> plans = MvUtils.getRuleOptimizedLogicalPlan(mvSql, columnRefFactory, connectContext);
+        Pair<OptExpression, LogicalPlan> plans;
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.getMvRuleOptimizedLogicalPlan")) {
+            String mvSql = mv.getViewDefineSql();
+            plans = MvUtils.getRuleOptimizedLogicalPlan(mvSql, columnRefFactory, connectContext);
+        }
         if (plans == null) {
             return null;
         }
         outputExpressions = plans.second.getOutputColumn();
         OptExpression mvPlan = plans.first;
         if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !mvPartitionNamesToRefresh.isEmpty()) {
-            boolean ret = updateScanWithPartitionRange(mv, mvPlan, mvPartitionNamesToRefresh);
-            if (!ret) {
-                return null;
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.updateScanWithPartitionRange")) {
+                boolean ret = updateScanWithPartitionRange(mv, mvPlan, mvPartitionNamesToRefresh);
+                if (!ret) {
+                    return null;
+                }
             }
         }
         return mvPlan;
