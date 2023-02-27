@@ -30,6 +30,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -90,18 +91,24 @@ public class MvRewritePreprocessor {
             // 1. build mv query logical plan
             ColumnRefFactory mvColumnRefFactory = new ColumnRefFactory();
             MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
-            OptExpression mvPlan = mvOptimizer.optimize(mv, mvColumnRefFactory, connectContext, partitionNamesToRefresh);
+            OptExpression mvPlan;
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.mvOptimize")) {
+                mvPlan = mvOptimizer.optimize(mv, mvColumnRefFactory, connectContext, partitionNamesToRefresh);
+            }
             if (!MvUtils.isValidMVPlan(mvPlan)) {
                 continue;
             }
-
             List<Table> baseTables = MvUtils.getAllTables(mvPlan);
-            List<ColumnRefOperator> mvOutputColumns = mvOptimizer.getOutputExpressions();
             MaterializationContext materializationContext =
                     new MaterializationContext(mv, mvPlan, queryColumnRefFactory,
                             mvColumnRefFactory, partitionNamesToRefresh, baseTables);
+            List<ColumnRefOperator> mvOutputColumns = mvOptimizer.getOutputExpressions();
+
             // generate scan mv plan here to reuse it in rule applications
-            LogicalOlapScanOperator scanMvOp = createScanMvOperator(materializationContext);
+            LogicalOlapScanOperator scanMvOp;
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.createScanMvOperator")) {
+                scanMvOp = createScanMvOperator(materializationContext);
+            }
             materializationContext.setScanMvOperator(scanMvOp);
             String dbName = connectContext.getGlobalStateMgr().getDb(mv.getDbId()).getFullName();
             connectContext.getDumpInfo().addTable(dbName, mv);

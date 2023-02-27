@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
 import com.google.common.collect.Lists;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -50,32 +51,34 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
     public List<OptExpression> transform(OptExpression queryExpression, OptimizerContext context) {
         List<OptExpression> results = Lists.newArrayList();
 
-        // Construct queryPredicateSplit to avoid creating multi times for multi MVs.
-        // Compute Query queryPredicateSplit
-        final ColumnRefFactory queryColumnRefFactory = context.getColumnRefFactory();
-        final ReplaceColumnRefRewriter queryColumnRefRewriter =
-                MvUtils.getReplaceColumnRefWriter(queryExpression, queryColumnRefFactory);
-        // Compensate partition predicates and add them into query predicate.
-        final ScalarOperator queryPartitionPredicate =
-                MvUtils.compensatePartitionPredicate(queryExpression, queryColumnRefFactory);
-        if (queryPartitionPredicate == null) {
-            return Lists.newArrayList();
-        }
-        ScalarOperator queryPredicate = MvUtils.rewriteOptExprCompoundPredicate(queryExpression, queryColumnRefRewriter);
-        if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
-            queryPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
-        }
-        final PredicateSplit queryPredicateSplit = PredicateSplit.splitPredicate(queryPredicate);
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.BaseMaterializedViewRewriteRule")) {
+            // Construct queryPredicateSplit to avoid creating multi times for multi MVs.
+            // Compute Query queryPredicateSplit
+            final ColumnRefFactory queryColumnRefFactory = context.getColumnRefFactory();
+            final ReplaceColumnRefRewriter queryColumnRefRewriter =
+                    MvUtils.getReplaceColumnRefWriter(queryExpression, queryColumnRefFactory);
+            // Compensate partition predicates and add them into query predicate.
+            final ScalarOperator queryPartitionPredicate =
+                    MvUtils.compensatePartitionPredicate(queryExpression, queryColumnRefFactory);
+            if (queryPartitionPredicate == null) {
+                return Lists.newArrayList();
+            }
+            ScalarOperator queryPredicate = MvUtils.rewriteOptExprCompoundPredicate(queryExpression, queryColumnRefRewriter);
+            if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
+                queryPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
+            }
+            final PredicateSplit queryPredicateSplit = PredicateSplit.splitPredicate(queryPredicate);
 
-        for (MaterializationContext mvContext : context.getCandidateMvs()) {
-            mvContext.setQueryExpression(queryExpression);
-            mvContext.setOptimizerContext(context);
-            MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvContext);
-            List<OptExpression> candidates = mvRewriter.rewrite(queryColumnRefRewriter,
-                    queryPredicateSplit);
-            candidates = postRewriteMV(context, candidates);
-            if (!candidates.isEmpty()) {
-                results.addAll(candidates);
+            for (MaterializationContext mvContext : context.getCandidateMvs()) {
+                mvContext.setQueryExpression(queryExpression);
+                mvContext.setOptimizerContext(context);
+                MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvContext);
+                List<OptExpression> candidates = mvRewriter.rewrite(queryColumnRefRewriter,
+                        queryPredicateSplit);
+                candidates = postRewriteMV(context, candidates);
+                if (!candidates.isEmpty()) {
+                    results.addAll(candidates);
+                }
             }
         }
 

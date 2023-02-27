@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
 import com.google.common.collect.Lists;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -35,7 +36,9 @@ public class SingleTableMvRewriteRule extends Rule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        rewrite(input, context);
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.SingleTableMvRewriteRule")) {
+            rewrite(input, context);
+        }
         return Lists.newArrayList();
     }
 
