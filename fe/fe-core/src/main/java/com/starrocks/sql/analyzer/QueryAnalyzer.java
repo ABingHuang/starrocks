@@ -292,8 +292,11 @@ public class QueryAnalyzer {
                     if (table.isSupported()) {
                         if (table.isOlapTable()) {
                             // Copying the olap table meta to avoid the lock when plan query
-                            Table copied = DeepCopy.copyWithGson(table, OlapTable.class);
-                            tableRelation.setTable(copied);
+                            try (PlannerProfile.ScopedTimer ignored =
+                                         PlannerProfile.getScopedTimer("Analyzer.resolveTableRef.deepCopyTable")) {
+                                Table copied = DeepCopy.copyWithGson(table, OlapTable.class);
+                                tableRelation.setTable(copied);
+                            }
                         } else {
                             tableRelation.setTable(table);
                         }
