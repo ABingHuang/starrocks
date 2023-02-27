@@ -44,6 +44,7 @@ import com.starrocks.common.io.DeepCopy;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -189,17 +190,19 @@ public class QueryAnalyzer {
             Scope sourceScope = process(resolvedRelation, scope);
             sourceScope.setParent(scope);
 
-            SelectAnalyzer selectAnalyzer = new SelectAnalyzer(session);
-            selectAnalyzer.analyze(
-                    analyzeState,
-                    selectRelation.getSelectList(),
-                    selectRelation.getRelation(),
-                    sourceScope,
-                    selectRelation.getGroupByClause(),
-                    selectRelation.getHavingClause(),
-                    selectRelation.getWhereClause(),
-                    selectRelation.getOrderBy(),
-                    selectRelation.getLimit());
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Analyzer.selectAnalysis")) {
+                SelectAnalyzer selectAnalyzer = new SelectAnalyzer(session);
+                selectAnalyzer.analyze(
+                        analyzeState,
+                        selectRelation.getSelectList(),
+                        selectRelation.getRelation(),
+                        sourceScope,
+                        selectRelation.getGroupByClause(),
+                        selectRelation.getHavingClause(),
+                        selectRelation.getWhereClause(),
+                        selectRelation.getOrderBy(),
+                        selectRelation.getLimit());
+            }
 
             selectRelation.fillResolvedAST(analyzeState);
             return analyzeState.getOutputScope();

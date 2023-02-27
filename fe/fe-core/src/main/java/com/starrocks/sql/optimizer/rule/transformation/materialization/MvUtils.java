@@ -315,7 +315,8 @@ public class MvUtils {
                                                                                ColumnRefFactory columnRefFactory,
                                                                                ConnectContext connectContext) {
         StatementBase mvStmt;
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.mvParserTime")) {
+        try (PlannerProfile.ScopedTimer ignored =
+                     PlannerProfile.getScopedTimer("Optimizer.preprocessMvs.mvPlan.generatePlan.parserTime")) {
             try {
                 List<StatementBase> statementBases =
                         com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable());
@@ -327,12 +328,14 @@ public class MvUtils {
             }
         }
         Preconditions.checkState(mvStmt instanceof QueryStatement);
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.mvAnalyzeTimer")) {
+        try (PlannerProfile.ScopedTimer ignored =
+                     PlannerProfile.getScopedTimer("Optimizer.preprocessMvs.mvPlan.generatePlan.analyzerTimer")) {
             Analyzer.analyze(mvStmt, connectContext);
         }
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
         LogicalPlan logicalPlan;
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.mvTransformerTimer")) {
+        try (PlannerProfile.ScopedTimer ignored =
+                     PlannerProfile.getScopedTimer("Optimizer.preprocessMvs.mvPlan.generatePlan.transformerTimer")) {
             logicalPlan =
                     new RelationTransformer(columnRefFactory, connectContext).transformWithSelectLimit(query);
         }
@@ -341,7 +344,8 @@ public class MvUtils {
         optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan;
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.mvOptimizationTimer")) {
+        try (PlannerProfile.ScopedTimer ignored =
+                     PlannerProfile.getScopedTimer("Optimizer.preprocessMvs.mvPlan.generatePlan.optimizationTimer")) {
             optimizedPlan = optimizer.optimize(
                     connectContext,
                     logicalPlan.getRoot(),

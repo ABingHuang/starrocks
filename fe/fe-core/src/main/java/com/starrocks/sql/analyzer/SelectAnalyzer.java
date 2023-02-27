@@ -33,6 +33,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.Relation;
@@ -91,32 +92,35 @@ public class SelectAnalyzer {
         List<Expr> orderByExpressions =
                 orderByElements.stream().map(OrderByElement::getExpr).collect(Collectors.toList());
 
-        analyzeGroupingOperations(analyzeState, groupByClause, outputExpressions);
-
+        List<FunctionCallExpr> aggregates;
         List<Expr> sourceExpressions = new ArrayList<>(outputExpressions);
-        if (havingClause != null) {
-            sourceExpressions.add(analyzeState.getHaving());
-        }
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Analyzer.selectAnalysis.agg")) {
+            analyzeGroupingOperations(analyzeState, groupByClause, outputExpressions);
 
-        List<FunctionCallExpr> aggregates = analyzeAggregations(analyzeState, sourceScope,
-                Stream.concat(sourceExpressions.stream(), orderByExpressions.stream()).collect(Collectors.toList()));
-        if (AnalyzerUtils.isAggregate(aggregates, groupByExpressions)) {
-            if (!groupByExpressions.isEmpty() &&
-                    selectList.getItems().stream().anyMatch(SelectListItem::isStar) &&
-                    !selectList.isDistinct()) {
-                throw new SemanticException("cannot combine '*' in select list with GROUP BY: *");
+            if (havingClause != null) {
+                sourceExpressions.add(analyzeState.getHaving());
             }
 
-            if (!aggregates.isEmpty() && selectList.isDistinct()) {
-                throw new SemanticException("cannot combine SELECT DISTINCT with aggregate functions or GROUP BY");
-            }
+            aggregates = analyzeAggregations(analyzeState, sourceScope,
+                    Stream.concat(sourceExpressions.stream(), orderByExpressions.stream()).collect(Collectors.toList()));
+            if (AnalyzerUtils.isAggregate(aggregates, groupByExpressions)) {
+                if (!groupByExpressions.isEmpty() &&
+                        selectList.getItems().stream().anyMatch(SelectListItem::isStar) &&
+                        !selectList.isDistinct()) {
+                    throw new SemanticException("cannot combine '*' in select list with GROUP BY: *");
+                }
 
-            new AggregationAnalyzer(session, analyzeState, groupByExpressions, sourceScope, null)
-                    .verify(sourceExpressions);
+                if (!aggregates.isEmpty() && selectList.isDistinct()) {
+                    throw new SemanticException("cannot combine SELECT DISTINCT with aggregate functions or GROUP BY");
+                }
 
-            if (orderByElements.size() > 0) {
-                new AggregationAnalyzer(session, analyzeState, groupByExpressions, sourceScope, sourceAndOutputScope)
-                        .verify(orderByExpressions);
+                new AggregationAnalyzer(session, analyzeState, groupByExpressions, sourceScope, null)
+                        .verify(sourceExpressions);
+
+                if (orderByElements.size() > 0) {
+                    new AggregationAnalyzer(session, analyzeState, groupByExpressions, sourceScope, sourceAndOutputScope)
+                            .verify(orderByExpressions);
+                }
             }
         }
 

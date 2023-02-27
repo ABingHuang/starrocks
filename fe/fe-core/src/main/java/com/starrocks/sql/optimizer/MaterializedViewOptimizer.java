@@ -55,7 +55,8 @@ public class MaterializedViewOptimizer {
                                   ConnectContext connectContext,
                                   Set<String> mvPartitionNamesToRefresh) {
         Pair<OptExpression, LogicalPlan> plans;
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.getMvRuleOptimizedLogicalPlan")) {
+        try (PlannerProfile.ScopedTimer ignored =
+                     PlannerProfile.getScopedTimer("Optimizer.preprocessMvs.mvPlan.generatePlan")) {
             String mvSql = mv.getViewDefineSql();
             plans = MvUtils.getRuleOptimizedLogicalPlan(mvSql, columnRefFactory, connectContext);
         }
@@ -65,7 +66,8 @@ public class MaterializedViewOptimizer {
         outputExpressions = plans.second.getOutputColumn();
         OptExpression mvPlan = plans.first;
         if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !mvPartitionNamesToRefresh.isEmpty()) {
-            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.updateScanWithPartitionRange")) {
+            try (PlannerProfile.ScopedTimer ignored =
+                         PlannerProfile.getScopedTimer("Optimizer.preprocessMvs.mvPlan.updateScanWithPartitionRange")) {
                 boolean ret = updateScanWithPartitionRange(mv, mvPlan, mvPartitionNamesToRefresh);
                 if (!ret) {
                     return null;
