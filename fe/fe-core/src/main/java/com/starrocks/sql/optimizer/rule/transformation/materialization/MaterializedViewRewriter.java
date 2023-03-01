@@ -533,7 +533,8 @@ public class MaterializedViewRewriter {
                 return tryUnionRewrite(rewriteContext, mvScanOptExpression);
             } else {
                 // all predicates are now query based
-                try (PlannerProfile.ScopedTimer ignored3 = PlannerProfile.getScopedTimer("Optimizer.mvOptimize.beforeViewBasedRewrite")) {
+                try (PlannerProfile.ScopedTimer ignored3 =
+                             PlannerProfile.getScopedTimer("Optimizer.mvOptimize.beforeViewBasedRewrite")) {
                     final ScalarOperator equalPredicates = MvUtils.canonizePredicate(compensationPredicates.getEqualPredicates());
                     final ScalarOperator otherPredicates = MvUtils.canonizePredicate(Utils.compoundAnd(
                             compensationPredicates.getRangePredicates(), compensationPredicates.getResidualPredicates()));
