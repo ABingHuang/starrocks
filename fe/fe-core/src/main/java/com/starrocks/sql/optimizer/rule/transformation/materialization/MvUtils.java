@@ -418,11 +418,14 @@ public class MvUtils {
     }
 
     public static ScalarOperator canonizePredicate(ScalarOperator predicate) {
-        if (predicate == null) {
-            return null;
+        try (PlannerProfile.ScopedTimer ignored1 =
+                     PlannerProfile.getScopedTimer("Optimizer.mvOptimize.canonizePredicate")) {
+            if (predicate == null) {
+                return null;
+            }
+            ScalarOperatorRewriter rewrite = new ScalarOperatorRewriter();
+            return rewrite.rewrite(predicate, ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
         }
-        ScalarOperatorRewriter rewrite = new ScalarOperatorRewriter();
-        return rewrite.rewrite(predicate, ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
     }
 
     public static ScalarOperator canonizePredicateForRewrite(ScalarOperator predicate) {

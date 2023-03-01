@@ -1141,40 +1141,43 @@ public class MaterializedViewRewriter {
                                                             ScalarOperator targetPu,
                                                             ColumnRewriter columnRewriter,
                                                             boolean isQueryAgainstView) {
-        ScalarOperator compensationPu;
-        if (srcPu == null && targetPu == null) {
-            compensationPu = ConstantOperator.createBoolean(true);
-        } else if (srcPu == null) {
-            return null;
-        } else if (targetPu == null) {
-            compensationPu = srcPu;
-        } else {
-            ScalarOperator canonizedSrcPu = MvUtils.canonizePredicateForRewrite(srcPu.clone());
-            ScalarOperator canonizedTargetPu = MvUtils.canonizePredicateForRewrite(targetPu.clone());
-            ScalarOperator swappedSrcPu;
-            ScalarOperator swappedTargetPu;
-            if (isQueryAgainstView) {
-                // src is query
-                swappedSrcPu = columnRewriter.rewriteByQueryEc(canonizedSrcPu);
-                // target is view
-                swappedTargetPu = columnRewriter.rewriteViewToQueryWithQueryEc(canonizedTargetPu);
+        try (PlannerProfile.ScopedTimer ignored1 =
+                     PlannerProfile.getScopedTimer("Optimizer.mvOptimize.getCompensationPredicate.getResidualPredicate")) {
+            ScalarOperator compensationPu;
+            if (srcPu == null && targetPu == null) {
+                compensationPu = ConstantOperator.createBoolean(true);
+            } else if (srcPu == null) {
+                return null;
+            } else if (targetPu == null) {
+                compensationPu = srcPu;
             } else {
-                // src is view
-                swappedSrcPu = columnRewriter.rewriteViewToQueryWithViewEc(canonizedSrcPu);
-                // target is query
-                swappedTargetPu = columnRewriter.rewriteByViewEc(canonizedTargetPu);
-            }
+                ScalarOperator canonizedSrcPu = MvUtils.canonizePredicateForRewrite(srcPu.clone());
+                ScalarOperator canonizedTargetPu = MvUtils.canonizePredicateForRewrite(targetPu.clone());
+                ScalarOperator swappedSrcPu;
+                ScalarOperator swappedTargetPu;
+                if (isQueryAgainstView) {
+                    // src is query
+                    swappedSrcPu = columnRewriter.rewriteByQueryEc(canonizedSrcPu);
+                    // target is view
+                    swappedTargetPu = columnRewriter.rewriteViewToQueryWithQueryEc(canonizedTargetPu);
+                } else {
+                    // src is view
+                    swappedSrcPu = columnRewriter.rewriteViewToQueryWithViewEc(canonizedSrcPu);
+                    // target is query
+                    swappedTargetPu = columnRewriter.rewriteByViewEc(canonizedTargetPu);
+                }
 
-            compensationPu = MvUtils.getCompensationPredicateForDisjunctive(swappedSrcPu, swappedTargetPu);
-            if (compensationPu == null) {
-                compensationPu = getCompensationResidualPredicate(swappedSrcPu, swappedTargetPu);
+                compensationPu = MvUtils.getCompensationPredicateForDisjunctive(swappedSrcPu, swappedTargetPu);
                 if (compensationPu == null) {
-                    return null;
+                    compensationPu = getCompensationResidualPredicate(swappedSrcPu, swappedTargetPu);
+                    if (compensationPu == null) {
+                        return null;
+                    }
                 }
             }
+            compensationPu = MvUtils.canonizePredicate(compensationPu);
+            return compensationPu;
         }
-        compensationPu = MvUtils.canonizePredicate(compensationPu);
-        return compensationPu;
     }
 
     private ScalarOperator getCompensationResidualPredicate(ScalarOperator srcPu, ScalarOperator targetPu) {
@@ -1195,32 +1198,35 @@ public class MaterializedViewRewriter {
                                                          ScalarOperator targetPr,
                                                          ColumnRewriter columnRewriter,
                                                          boolean isQueryAgainstView) {
-        ScalarOperator compensationPr;
-        if (srcPr == null && targetPr == null) {
-            compensationPr = ConstantOperator.createBoolean(true);
-        } else if (srcPr == null) {
-            return null;
-        } else {
-            ScalarOperator canonizedSrcPr = MvUtils.canonizePredicateForRewrite(srcPr.clone());
-            ScalarOperator canonizedTargetPr = targetPr == null ? null : MvUtils.canonizePredicateForRewrite(targetPr.clone());
-
-            // swap column by query EC
-            ScalarOperator swappedSrcPr;
-            ScalarOperator swappedTargetPr;
-            if (isQueryAgainstView) {
-                // for query
-                swappedSrcPr = columnRewriter.rewriteByQueryEc(canonizedSrcPr);
-                // for view, swap column by relation mapping and query ec
-                swappedTargetPr = columnRewriter.rewriteViewToQueryWithQueryEc(canonizedTargetPr);
+        try (PlannerProfile.ScopedTimer ignored1 =
+                     PlannerProfile.getScopedTimer("Optimizer.mvOptimize.getCompensationPredicate.getRangePredicate")) {
+            ScalarOperator compensationPr;
+            if (srcPr == null && targetPr == null) {
+                compensationPr = ConstantOperator.createBoolean(true);
+            } else if (srcPr == null) {
+                return null;
             } else {
-                // for view
-                swappedSrcPr = columnRewriter.rewriteViewToQueryWithViewEc(canonizedSrcPr);
-                // for query
-                swappedTargetPr = columnRewriter.rewriteByViewEc(canonizedTargetPr);
+                ScalarOperator canonizedSrcPr = MvUtils.canonizePredicateForRewrite(srcPr.clone());
+                ScalarOperator canonizedTargetPr = targetPr == null ? null : MvUtils.canonizePredicateForRewrite(targetPr.clone());
+
+                // swap column by query EC
+                ScalarOperator swappedSrcPr;
+                ScalarOperator swappedTargetPr;
+                if (isQueryAgainstView) {
+                    // for query
+                    swappedSrcPr = columnRewriter.rewriteByQueryEc(canonizedSrcPr);
+                    // for view, swap column by relation mapping and query ec
+                    swappedTargetPr = columnRewriter.rewriteViewToQueryWithQueryEc(canonizedTargetPr);
+                } else {
+                    // for view
+                    swappedSrcPr = columnRewriter.rewriteViewToQueryWithViewEc(canonizedSrcPr);
+                    // for query
+                    swappedTargetPr = columnRewriter.rewriteByViewEc(canonizedTargetPr);
+                }
+                compensationPr = getCompensationRangePredicate(swappedSrcPr, swappedTargetPr);
             }
-            compensationPr = getCompensationRangePredicate(swappedSrcPr, swappedTargetPr);
+            return MvUtils.canonizePredicate(compensationPr);
         }
-        return MvUtils.canonizePredicate(compensationPr);
     }
 
     private ScalarOperator getCompensationRangePredicate(ScalarOperator srcPr, ScalarOperator targetPr) {
@@ -1234,54 +1240,57 @@ public class MaterializedViewRewriter {
     // if sourceEc equals targetEc, return true literal
     private ScalarOperator getCompensationEqualPredicate(EquivalenceClasses sourceEquivalenceClasses,
                                                          EquivalenceClasses targetEquivalenceClasses) {
-        if (sourceEquivalenceClasses.getEquivalenceClasses().isEmpty()
-                && targetEquivalenceClasses.getEquivalenceClasses().isEmpty()) {
-            return ConstantOperator.createBoolean(true);
-        }
-        if (sourceEquivalenceClasses.getEquivalenceClasses().isEmpty()
-                && !targetEquivalenceClasses.getEquivalenceClasses().isEmpty()) {
-            // targetEc must not be contained in sourceEc, just return null
-            return null;
-        }
-        final List<Set<ColumnRefOperator>> sourceEquivalenceClassesList = sourceEquivalenceClasses.getEquivalenceClasses();
-        final List<Set<ColumnRefOperator>> targetEquivalenceClassesList = targetEquivalenceClasses.getEquivalenceClasses();
-        // it is a mapping from source to target
-        // it may be 1 to n
-        final Multimap<Integer, Integer> mapping = computeECMapping(sourceEquivalenceClassesList, targetEquivalenceClassesList);
-        if (mapping == null) {
-            // means that the targetEc can not be contained in sourceEc
-            // it means Equijoin subsumption test fails
-            return null;
-        }
-        // compute compensation equality predicate
-        // if targetEc equals sourceEc, return true literal, so init to true here
-        ScalarOperator compensation = ConstantOperator.createBoolean(true);
-        for (int i = 0; i < sourceEquivalenceClassesList.size(); i++) {
-            if (!mapping.containsKey(i)) {
-                // it means that the targeEc do not have the corresponding mapping ec
-                // we should all equality predicates between each column in ec into compensation
-                Iterator<ColumnRefOperator> it = sourceEquivalenceClassesList.get(i).iterator();
-                ScalarOperator first = it.next();
-                while (it.hasNext()) {
-                    ScalarOperator equalPredicate = BinaryPredicateOperator.eq(first, it.next());
-                    compensation = Utils.compoundAnd(compensation, equalPredicate);
-                }
-            } else {
-                // remove columns exists in target and add remain equality predicate in source into compensation
-                for (int j : mapping.get(i)) {
-                    Set<ScalarOperator> difference = Sets.newHashSet(sourceEquivalenceClassesList.get(i));
-                    difference.removeAll(targetEquivalenceClassesList.get(j));
-                    Iterator<ColumnRefOperator> it = targetEquivalenceClassesList.get(j).iterator();
-                    ScalarOperator targetFirst = it.next();
-                    for (ScalarOperator remain : difference) {
-                        ScalarOperator equalPredicate = BinaryPredicateOperator.eq(remain, targetFirst);
+        try (PlannerProfile.ScopedTimer ignored1 =
+                     PlannerProfile.getScopedTimer("Optimizer.mvOptimize.getCompensationPredicate.getEqualPredicate")) {
+            if (sourceEquivalenceClasses.getEquivalenceClasses().isEmpty()
+                    && targetEquivalenceClasses.getEquivalenceClasses().isEmpty()) {
+                return ConstantOperator.createBoolean(true);
+            }
+            if (sourceEquivalenceClasses.getEquivalenceClasses().isEmpty()
+                    && !targetEquivalenceClasses.getEquivalenceClasses().isEmpty()) {
+                // targetEc must not be contained in sourceEc, just return null
+                return null;
+            }
+            final List<Set<ColumnRefOperator>> sourceEquivalenceClassesList = sourceEquivalenceClasses.getEquivalenceClasses();
+            final List<Set<ColumnRefOperator>> targetEquivalenceClassesList = targetEquivalenceClasses.getEquivalenceClasses();
+            // it is a mapping from source to target
+            // it may be 1 to n
+            final Multimap<Integer, Integer> mapping = computeECMapping(sourceEquivalenceClassesList, targetEquivalenceClassesList);
+            if (mapping == null) {
+                // means that the targetEc can not be contained in sourceEc
+                // it means Equijoin subsumption test fails
+                return null;
+            }
+            // compute compensation equality predicate
+            // if targetEc equals sourceEc, return true literal, so init to true here
+            ScalarOperator compensation = ConstantOperator.createBoolean(true);
+            for (int i = 0; i < sourceEquivalenceClassesList.size(); i++) {
+                if (!mapping.containsKey(i)) {
+                    // it means that the targeEc do not have the corresponding mapping ec
+                    // we should all equality predicates between each column in ec into compensation
+                    Iterator<ColumnRefOperator> it = sourceEquivalenceClassesList.get(i).iterator();
+                    ScalarOperator first = it.next();
+                    while (it.hasNext()) {
+                        ScalarOperator equalPredicate = BinaryPredicateOperator.eq(first, it.next());
                         compensation = Utils.compoundAnd(compensation, equalPredicate);
+                    }
+                } else {
+                    // remove columns exists in target and add remain equality predicate in source into compensation
+                    for (int j : mapping.get(i)) {
+                        Set<ScalarOperator> difference = Sets.newHashSet(sourceEquivalenceClassesList.get(i));
+                        difference.removeAll(targetEquivalenceClassesList.get(j));
+                        Iterator<ColumnRefOperator> it = targetEquivalenceClassesList.get(j).iterator();
+                        ScalarOperator targetFirst = it.next();
+                        for (ScalarOperator remain : difference) {
+                            ScalarOperator equalPredicate = BinaryPredicateOperator.eq(remain, targetFirst);
+                            compensation = Utils.compoundAnd(compensation, equalPredicate);
+                        }
                     }
                 }
             }
+            compensation = MvUtils.canonizePredicate(compensation);
+            return compensation;
         }
-        compensation = MvUtils.canonizePredicate(compensation);
-        return compensation;
     }
 
     // check whether each target equivalence classes is contained in source equivalence classes.
