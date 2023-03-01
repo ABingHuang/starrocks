@@ -89,11 +89,10 @@ public class MvRewritePreprocessor {
             }
 
             // 1. build mv query logical plan
-            ColumnRefFactory mvColumnRefFactory = new ColumnRefFactory();
             MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
             OptExpression mvPlan;
             try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.preprocessMvs.mvPlan")) {
-                mvPlan = mvOptimizer.optimize(mv, mvColumnRefFactory, connectContext, partitionNamesToRefresh);
+                mvPlan = mvOptimizer.optimize(mv, connectContext, partitionNamesToRefresh);
             }
             if (!MvUtils.isValidMVPlan(mvPlan)) {
                 continue;
@@ -101,8 +100,9 @@ public class MvRewritePreprocessor {
             List<Table> baseTables = MvUtils.getAllTables(mvPlan);
             MaterializationContext materializationContext =
                     new MaterializationContext(mv, mvPlan, queryColumnRefFactory,
-                            mvColumnRefFactory, partitionNamesToRefresh, baseTables);
-            List<ColumnRefOperator> mvOutputColumns = mvOptimizer.getOutputExpressions();
+                            mv.getPlanContext().getRefFactory(), partitionNamesToRefresh, baseTables);
+            // List<ColumnRefOperator> mvOutputColumns = mvOptimizer.getOutputExpressions();
+            List<ColumnRefOperator> mvOutputColumns = mv.getPlanContext().getOutputColumns();
 
             // generate scan mv plan here to reuse it in rule applications
             LogicalOlapScanOperator scanMvOp;

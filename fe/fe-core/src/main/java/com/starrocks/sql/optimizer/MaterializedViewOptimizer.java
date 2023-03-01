@@ -48,38 +48,44 @@ import java.util.stream.Collectors;
 public class MaterializedViewOptimizer {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewOptimizer.class);
 
-    private List<ColumnRefOperator> outputExpressions;
-
     public OptExpression optimize(MaterializedView mv,
-                                  ColumnRefFactory columnRefFactory,
                                   ConnectContext connectContext,
                                   Set<String> mvPartitionNamesToRefresh) {
-        Pair<OptExpression, LogicalPlan> plans;
-        try (PlannerProfile.ScopedTimer ignored =
-                     PlannerProfile.getScopedTimer("Optimizer.preprocessMvs.mvPlan.generatePlan")) {
-            String mvSql = mv.getViewDefineSql();
-            plans = MvUtils.getRuleOptimizedLogicalPlan(mvSql, columnRefFactory, connectContext);
+        PlanContext planContext = mv.getPlanContext();
+        if (planContext == null) {
+            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+            Pair<OptExpression, LogicalPlan> plans;
+            try (PlannerProfile.ScopedTimer ignored =
+                         PlannerProfile.getScopedTimer("Optimizer.preprocessMvs.mvPlan.generatePlan")) {
+                String mvSql = mv.getViewDefineSql();
+                plans = MvUtils.getRuleOptimizedLogicalPlan(mvSql, columnRefFactory, connectContext);
+            }
+            if (plans == null) {
+                return null;
+            }
+            OptExpression mvPlan = plans.first;
+            planContext = new PlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory);
+            mv.setPlanContext(planContext);
         }
-        if (plans == null) {
-            return null;
-        }
-        outputExpressions = plans.second.getOutputColumn();
-        OptExpression mvPlan = plans.first;
+
         if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !mvPartitionNamesToRefresh.isEmpty()) {
             try (PlannerProfile.ScopedTimer ignored =
                          PlannerProfile.getScopedTimer("Optimizer.preprocessMvs.mvPlan.updateScanWithPartitionRange")) {
-                boolean ret = updateScanWithPartitionRange(mv, mvPlan, mvPartitionNamesToRefresh);
+                boolean ret = updateScanWithPartitionRange(mv, planContext.getPlan(), mvPartitionNamesToRefresh);
                 if (!ret) {
                     return null;
                 }
             }
         }
-        return mvPlan;
+        return planContext.getPlan();
     }
 
+    /*
     public List<ColumnRefOperator> getOutputExpressions() {
         return outputExpressions;
     }
+
+     */
 
     // try to get partial partition predicates of partitioned mv.
     // eg, mv1's base partition table is t1, partition column is k1 and has two partition:
