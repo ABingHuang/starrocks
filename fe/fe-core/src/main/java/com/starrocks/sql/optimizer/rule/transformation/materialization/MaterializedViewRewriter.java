@@ -571,26 +571,27 @@ public class MaterializedViewRewriter {
                                                       Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp,
                                                       ScalarOperator equalPredicates,
                                                       ScalarOperator otherPredicates) {
-
-
-        if (!ConstantOperator.TRUE.equals(equalPredicates)) {
-            equalPredicates = rewriteMVCompensationExpression(rewriteContext, rewriter,
-                    mvColumnRefToScalarOp, equalPredicates, true);
-            if (equalPredicates == null) {
-                return null;
+        try (PlannerProfile.ScopedTimer ignored3 =
+                     PlannerProfile.getScopedTimer("Optimizer.mvOptimize.getMVCompensationPredicate")) {
+            if (!ConstantOperator.TRUE.equals(equalPredicates)) {
+                equalPredicates = rewriteMVCompensationExpression(rewriteContext, rewriter,
+                        mvColumnRefToScalarOp, equalPredicates, true);
+                if (equalPredicates == null) {
+                    return null;
+                }
             }
-        }
 
 
-        if (!ConstantOperator.TRUE.equals(otherPredicates)) {
-            otherPredicates = rewriteMVCompensationExpression(rewriteContext, rewriter,
-                    mvColumnRefToScalarOp, otherPredicates, false);
-            if (otherPredicates == null) {
-                return null;
+            if (!ConstantOperator.TRUE.equals(otherPredicates)) {
+                otherPredicates = rewriteMVCompensationExpression(rewriteContext, rewriter,
+                        mvColumnRefToScalarOp, otherPredicates, false);
+                if (otherPredicates == null) {
+                    return null;
+                }
             }
-        }
 
-        return MvUtils.canonizePredicate(Utils.compoundAnd(equalPredicates, otherPredicates));
+            return MvUtils.canonizePredicate(Utils.compoundAnd(equalPredicates, otherPredicates));
+        }
     }
 
     private ScalarOperator rewriteMVCompensationExpression(RewriteContext rewriteContext,
@@ -598,26 +599,29 @@ public class MaterializedViewRewriter {
                                                            Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp,
                                                            ScalarOperator predicate,
                                                            boolean isMVBased) {
-        List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
-        // swapped by query based view ec
-        List<ScalarOperator> rewrittenConjuncts = conjuncts.stream()
-                .map(conjunct ->  {
-                    if (isMVBased) {
-                        return rewriter.rewriteByViewEc(conjunct);
-                    } else {
-                        return rewriter.rewriteByQueryEc(conjunct);
-                    }
-                })
-                .collect(Collectors.toList());
+        try (PlannerProfile.ScopedTimer ignored3 =
+                     PlannerProfile.getScopedTimer("Optimizer.mvOptimize.rewriteMVCompensationExpression")) {
+            List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+            // swapped by query based view ec
+            List<ScalarOperator> rewrittenConjuncts = conjuncts.stream()
+                    .map(conjunct -> {
+                        if (isMVBased) {
+                            return rewriter.rewriteByViewEc(conjunct);
+                        } else {
+                            return rewriter.rewriteByQueryEc(conjunct);
+                        }
+                    })
+                    .collect(Collectors.toList());
 
-        Multimap<ScalarOperator, ColumnRefOperator> normalizedMap =
-                normalizeAndReverseProjection(mvColumnRefToScalarOp, rewriteContext, isMVBased);
-        List<ScalarOperator> candidates = rewriteScalarOpToTarget(rewrittenConjuncts, normalizedMap,
-                rewriteContext.getOutputMapping(), new ColumnRefSet(rewriteContext.getQueryColumnSet()));
-        if (candidates == null || candidates.isEmpty()) {
-            return null;
+            Multimap<ScalarOperator, ColumnRefOperator> normalizedMap =
+                    normalizeAndReverseProjection(mvColumnRefToScalarOp, rewriteContext, isMVBased);
+            List<ScalarOperator> candidates = rewriteScalarOpToTarget(rewrittenConjuncts, normalizedMap,
+                    rewriteContext.getOutputMapping(), new ColumnRefSet(rewriteContext.getQueryColumnSet()));
+            if (candidates == null || candidates.isEmpty()) {
+                return null;
+            }
+            return Utils.compoundAnd(candidates);
         }
-        return Utils.compoundAnd(candidates);
     }
 
     private OptExpression tryUnionRewrite(RewriteContext rewriteContext, OptExpression mvOptExpr) {
