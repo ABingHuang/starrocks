@@ -1207,7 +1207,8 @@ public class MaterializedViewRewriter {
                 return null;
             } else {
                 ScalarOperator canonizedSrcPr = MvUtils.canonizePredicateForRewrite(srcPr.clone());
-                ScalarOperator canonizedTargetPr = targetPr == null ? null : MvUtils.canonizePredicateForRewrite(targetPr.clone());
+                ScalarOperator canonizedTargetPr =
+                        targetPr == null ? null : MvUtils.canonizePredicateForRewrite(targetPr.clone());
 
                 // swap column by query EC
                 ScalarOperator swappedSrcPr;
@@ -1255,7 +1256,8 @@ public class MaterializedViewRewriter {
             final List<Set<ColumnRefOperator>> targetEquivalenceClassesList = targetEquivalenceClasses.getEquivalenceClasses();
             // it is a mapping from source to target
             // it may be 1 to n
-            final Multimap<Integer, Integer> mapping = computeECMapping(sourceEquivalenceClassesList, targetEquivalenceClassesList);
+            final Multimap<Integer, Integer> mapping =
+                    computeECMapping(sourceEquivalenceClassesList, targetEquivalenceClassesList);
             if (mapping == null) {
                 // means that the targetEc can not be contained in sourceEc
                 // it means Equijoin subsumption test fails
