@@ -494,13 +494,16 @@ public class MaterializedViewRewriter {
             final Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp = rewriteContext.getMVColumnRefToScalarOp();
             ScalarOperator mvOriginalPredicates = mvScanOperator.getPredicate();
             if (mvOriginalPredicates != null && !ConstantOperator.TRUE.equals(mvOriginalPredicates)) {
-                mvOriginalPredicates = rewriteMVCompensationExpression(rewriteContext, columnRewriter,
-                        mvColumnRefToScalarOp, mvOriginalPredicates, false);
-                if (mvOriginalPredicates == null) {
-                    return null;
-                }
-                if (!ConstantOperator.TRUE.equals(mvOriginalPredicates)) {
-                    mvScanBuilder.setPredicate(mvOriginalPredicates);
+                try (PlannerProfile.ScopedTimer ignored1 =
+                             PlannerProfile.getScopedTimer("Optimizer.mvOptimize.rewriteMVCompensationExpression")) {
+                    mvOriginalPredicates = rewriteMVCompensationExpression(rewriteContext, columnRewriter,
+                            mvColumnRefToScalarOp, mvOriginalPredicates, false);
+                    if (mvOriginalPredicates == null) {
+                        return null;
+                    }
+                    if (!ConstantOperator.TRUE.equals(mvOriginalPredicates)) {
+                        mvScanBuilder.setPredicate(mvOriginalPredicates);
+                    }
                 }
             }
             OptExpression mvScanOptExpression = OptExpression.create(mvScanBuilder.build());
@@ -509,13 +512,20 @@ public class MaterializedViewRewriter {
             // construct query based view EC
             EquivalenceClasses queryBaseViewEc = new EquivalenceClasses();
             if (rewriteContext.getMvPredicateSplit().getEqualPredicates() != null) {
-                ScalarOperator equalPredicates = rewriteContext.getMvPredicateSplit().getEqualPredicates();
-                ScalarOperator queryBasedViewEqualPredicate = columnRewriter.rewriteViewToQuery(equalPredicates);
-                queryBaseViewEc = createEquivalenceClasses(queryBasedViewEqualPredicate);
+                try (PlannerProfile.ScopedTimer ignored1 =
+                             PlannerProfile.getScopedTimer("Optimizer.mvOptimize.getQueryBaseViewEc")) {
+                    ScalarOperator equalPredicates = rewriteContext.getMvPredicateSplit().getEqualPredicates();
+                    ScalarOperator queryBasedViewEqualPredicate = columnRewriter.rewriteViewToQuery(equalPredicates);
+                    queryBaseViewEc = createEquivalenceClasses(queryBasedViewEqualPredicate);
+                }
             }
             rewriteContext.setQueryBasedViewEquivalenceClasses(queryBaseViewEc);
 
-            final PredicateSplit compensationPredicates = getCompensationPredicates(rewriteContext, true);
+            final PredicateSplit compensationPredicates;
+            try (PlannerProfile.ScopedTimer ignored1 =
+                         PlannerProfile.getScopedTimer("Optimizer.mvOptimize.getCompensationPredicate")) {
+                compensationPredicates = getCompensationPredicates(rewriteContext, true);
+            }
             if (compensationPredicates == null) {
                 if (!materializationContext.getOptimizerContext().getSessionVariable().isEnableMaterializedViewUnionRewrite()) {
                     return null;
@@ -523,28 +533,30 @@ public class MaterializedViewRewriter {
                 return tryUnionRewrite(rewriteContext, mvScanOptExpression);
             } else {
                 // all predicates are now query based
-                final ScalarOperator equalPredicates = MvUtils.canonizePredicate(compensationPredicates.getEqualPredicates());
-                final ScalarOperator otherPredicates = MvUtils.canonizePredicate(Utils.compoundAnd(
-                        compensationPredicates.getRangePredicates(), compensationPredicates.getResidualPredicates()));
+                try (PlannerProfile.ScopedTimer ignored3 = PlannerProfile.getScopedTimer("Optimizer.mvOptimize.beforeViewBasedRewrite")) {
+                    final ScalarOperator equalPredicates = MvUtils.canonizePredicate(compensationPredicates.getEqualPredicates());
+                    final ScalarOperator otherPredicates = MvUtils.canonizePredicate(Utils.compoundAnd(
+                            compensationPredicates.getRangePredicates(), compensationPredicates.getResidualPredicates()));
 
-                final ScalarOperator compensationPredicate = getMVCompensationPredicate(rewriteContext,
-                        columnRewriter, mvColumnRefToScalarOp, equalPredicates, otherPredicates);
-                if (compensationPredicate == null) {
-                    return null;
-                }
-                // NOTE: Keeps mv's original predicates which have been already rewritten.
-                final List<ScalarOperator> finalCompensationPredicates =
-                        Lists.newArrayList(compensationPredicate, mvScanOptExpression.getOp().getPredicate())
-                                .stream().filter(op -> op != null && !ConstantOperator.TRUE.equals(op))
-                                .collect(Collectors.toList());
+                    final ScalarOperator compensationPredicate = getMVCompensationPredicate(rewriteContext,
+                            columnRewriter, mvColumnRefToScalarOp, equalPredicates, otherPredicates);
+                    if (compensationPredicate == null) {
+                        return null;
+                    }
+                    // NOTE: Keeps mv's original predicates which have been already rewritten.
+                    final List<ScalarOperator> finalCompensationPredicates =
+                            Lists.newArrayList(compensationPredicate, mvScanOptExpression.getOp().getPredicate())
+                                    .stream().filter(op -> op != null && !ConstantOperator.TRUE.equals(op))
+                                    .collect(Collectors.toList());
 
-                if (!finalCompensationPredicates.isEmpty()) {
-                    final Operator.Builder newScanOpBuilder = OperatorBuilderFactory.build(mvScanOptExpression.getOp());
-                    newScanOpBuilder.withOperator(mvScanOptExpression.getOp());
-                    newScanOpBuilder.setPredicate(Utils.compoundAnd(finalCompensationPredicates));
-                    mvScanOptExpression = OptExpression.create(newScanOpBuilder.build());
-                    mvScanOptExpression.setLogicalProperty(null);
-                    deriveLogicalProperty(mvScanOptExpression);
+                    if (!finalCompensationPredicates.isEmpty()) {
+                        final Operator.Builder newScanOpBuilder = OperatorBuilderFactory.build(mvScanOptExpression.getOp());
+                        newScanOpBuilder.withOperator(mvScanOptExpression.getOp());
+                        newScanOpBuilder.setPredicate(Utils.compoundAnd(finalCompensationPredicates));
+                        mvScanOptExpression = OptExpression.create(newScanOpBuilder.build());
+                        mvScanOptExpression.setLogicalProperty(null);
+                        deriveLogicalProperty(mvScanOptExpression);
+                    }
                 }
 
                 // add projection
