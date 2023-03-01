@@ -51,7 +51,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
     public List<OptExpression> transform(OptExpression queryExpression, OptimizerContext context) {
         List<OptExpression> results = Lists.newArrayList();
 
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.BaseMaterializedViewRewriteRule")) {
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.mvOptimize")) {
             // Construct queryPredicateSplit to avoid creating multi times for multi MVs.
             // Compute Query queryPredicateSplit
             final ColumnRefFactory queryColumnRefFactory = context.getColumnRefFactory();
@@ -73,9 +73,14 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                 mvContext.setQueryExpression(queryExpression);
                 mvContext.setOptimizerContext(context);
                 MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvContext);
-                List<OptExpression> candidates = mvRewriter.rewrite(queryColumnRefRewriter,
-                        queryPredicateSplit);
-                candidates = postRewriteMV(context, candidates);
+                List<OptExpression> candidates;
+                try (PlannerProfile.ScopedTimer ignored2 = PlannerProfile.getScopedTimer("Optimizer.mvOptimize.mvRewriter")) {
+                    candidates = mvRewriter.rewrite(queryColumnRefRewriter,
+                            queryPredicateSplit);
+                }
+                try (PlannerProfile.ScopedTimer ignored2 = PlannerProfile.getScopedTimer("Optimizer.mvOptimize.postRewrite")) {
+                    candidates = postRewriteMV(context, candidates);
+                }
                 if (!candidates.isEmpty()) {
                     results.addAll(candidates);
                 }
