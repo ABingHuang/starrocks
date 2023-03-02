@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -36,43 +37,58 @@ public class ColumnRewriter {
     }
 
     public ScalarOperator rewriteByQueryEc(ScalarOperator predicate) {
-        if (predicate == null) {
-            return null;
+        try (PlannerProfile.ScopedTimer ignored =
+                     PlannerProfile.getScopedTimer("Optimizer.mvOptimize.rewriteByQueryEc")) {
+            if (predicate == null) {
+                return null;
+            }
+            ColumnRewriteVisitor visitor = new ColumnRewriteVisitor(rewriteContext, false, false, true, true);
+            return predicate.accept(visitor, null);
         }
-        ColumnRewriteVisitor visitor = new ColumnRewriteVisitor(rewriteContext, false, false, true, true);
-        return predicate.accept(visitor, null);
     }
 
     public ScalarOperator rewriteByViewEc(ScalarOperator predicate) {
-        if (predicate == null) {
-            return null;
+        try (PlannerProfile.ScopedTimer ignored =
+                     PlannerProfile.getScopedTimer("Optimizer.mvOptimize.rewriteByViewEc")) {
+            if (predicate == null) {
+                return null;
+            }
+            ColumnRewriteVisitor visitor = new ColumnRewriteVisitor(rewriteContext, false, false, true, false);
+            return predicate.accept(visitor, null);
         }
-        ColumnRewriteVisitor visitor = new ColumnRewriteVisitor(rewriteContext, false, false, true, false);
-        return predicate.accept(visitor, null);
     }
 
     public ScalarOperator rewriteViewToQuery(ScalarOperator predicate) {
-        if (predicate == null) {
-            return null;
+        try (PlannerProfile.ScopedTimer ignored =
+                     PlannerProfile.getScopedTimer("Optimizer.mvOptimize.rewriteViewToQuery")) {
+            if (predicate == null) {
+                return null;
+            }
+            ColumnRewriteVisitor visitor = new ColumnRewriteVisitor(rewriteContext, true, true, false, false);
+            return predicate.accept(visitor, null);
         }
-        ColumnRewriteVisitor visitor = new ColumnRewriteVisitor(rewriteContext, true, true, false, false);
-        return predicate.accept(visitor, null);
     }
 
     public ScalarOperator rewriteViewToQueryWithQueryEc(ScalarOperator predicate) {
-        if (predicate == null) {
-            return null;
+        try (PlannerProfile.ScopedTimer ignored =
+                     PlannerProfile.getScopedTimer("Optimizer.mvOptimize.rewriteViewToQueryWithQueryEc")) {
+            if (predicate == null) {
+                return null;
+            }
+            ColumnRewriteVisitor visitor = new ColumnRewriteVisitor(rewriteContext, true, true, true, true);
+            return predicate.accept(visitor, null);
         }
-        ColumnRewriteVisitor visitor = new ColumnRewriteVisitor(rewriteContext, true, true, true, true);
-        return predicate.accept(visitor, null);
     }
 
     public ScalarOperator rewriteViewToQueryWithViewEc(ScalarOperator predicate) {
-        if (predicate == null) {
-            return null;
+        try (PlannerProfile.ScopedTimer ignored =
+                     PlannerProfile.getScopedTimer("Optimizer.mvOptimize.rewriteViewToQueryWithViewEc")) {
+            if (predicate == null) {
+                return null;
+            }
+            ColumnRewriteVisitor visitor = new ColumnRewriteVisitor(rewriteContext, true, true, true, false);
+            return predicate.accept(visitor, null);
         }
-        ColumnRewriteVisitor visitor = new ColumnRewriteVisitor(rewriteContext, true, true, true, false);
-        return predicate.accept(visitor, null);
     }
 
     public ScalarOperator rewriteQueryToView(ScalarOperator predicate) {
