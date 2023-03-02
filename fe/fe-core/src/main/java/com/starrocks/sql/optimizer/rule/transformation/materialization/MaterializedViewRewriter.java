@@ -923,46 +923,52 @@ public class MaterializedViewRewriter {
                                                            Multimap<ScalarOperator, ColumnRefOperator> reversedViewProjection,
                                                            Map<ColumnRefOperator, ColumnRefOperator> outputMapping,
                                                            ColumnRefSet originalColumnSet) {
-        List<ScalarOperator> rewrittenExprs = Lists.newArrayList();
-        for (ScalarOperator expr : exprsToRewrites) {
-            ScalarOperator rewritten = replaceExprWithTarget(expr, reversedViewProjection, outputMapping);
-            if (expr.isVariable() && expr == rewritten) {
-                // it means it can not be rewritten  by target
-                return Lists.newArrayList();
+        try (PlannerProfile.ScopedTimer ignored3 =
+                     PlannerProfile.getScopedTimer("Optimizer.mvOptimize.rewriteScalarOpToTarget")) {
+            List<ScalarOperator> rewrittenExprs = Lists.newArrayList();
+            for (ScalarOperator expr : exprsToRewrites) {
+                ScalarOperator rewritten = replaceExprWithTarget(expr, reversedViewProjection, outputMapping);
+                if (expr.isVariable() && expr == rewritten) {
+                    // it means it can not be rewritten  by target
+                    return Lists.newArrayList();
+                }
+                if (originalColumnSet != null && !isAllExprReplaced(rewritten, originalColumnSet)) {
+                    // it means there is some column that can not be rewritten by outputs of mv
+                    return Lists.newArrayList();
+                }
+                rewrittenExprs.add(rewritten);
             }
-            if (originalColumnSet != null && !isAllExprReplaced(rewritten, originalColumnSet)) {
-                // it means there is some column that can not be rewritten by outputs of mv
-                return Lists.newArrayList();
-            }
-            rewrittenExprs.add(rewritten);
+            return rewrittenExprs;
         }
-        return rewrittenExprs;
     }
 
     protected boolean isAllExprReplaced(ScalarOperator rewritten, ColumnRefSet originalColumnSet) {
-        ScalarOperatorVisitor<Void, Void> visitor = new ScalarOperatorVisitor<Void, Void>() {
-            @Override
-            public Void visit(ScalarOperator scalarOperator, Void context) {
-                for (ScalarOperator child : scalarOperator.getChildren()) {
-                    child.accept(this, null);
+        try (PlannerProfile.ScopedTimer ignored3 =
+                     PlannerProfile.getScopedTimer("Optimizer.mvOptimize.isAllExprReplaced")) {
+            ScalarOperatorVisitor<Void, Void> visitor = new ScalarOperatorVisitor<Void, Void>() {
+                @Override
+                public Void visit(ScalarOperator scalarOperator, Void context) {
+                    for (ScalarOperator child : scalarOperator.getChildren()) {
+                        child.accept(this, null);
+                    }
+                    return null;
                 }
-                return null;
-            }
 
-            @Override
-            public Void visitVariableReference(ColumnRefOperator variable, Void context) {
-                if (originalColumnSet.contains(variable)) {
-                    throw new UnsupportedOperationException("predicate can not be rewritten");
+                @Override
+                public Void visitVariableReference(ColumnRefOperator variable, Void context) {
+                    if (originalColumnSet.contains(variable)) {
+                        throw new UnsupportedOperationException("predicate can not be rewritten");
+                    }
+                    return null;
                 }
-                return null;
+            };
+            try {
+                rewritten.accept(visitor, null);
+            } catch (UnsupportedOperationException e) {
+                return false;
             }
-        };
-        try {
-            rewritten.accept(visitor, null);
-        } catch (UnsupportedOperationException e) {
-            return false;
+            return true;
         }
-        return true;
     }
 
     // TODO: support rewrite query by using mv's binary predicate later:
@@ -971,51 +977,54 @@ public class MaterializedViewRewriter {
     protected ScalarOperator replaceExprWithTarget(ScalarOperator expr,
                                                    Multimap<ScalarOperator, ColumnRefOperator> exprMap,
                                                    Map<ColumnRefOperator, ColumnRefOperator> columnMapping) {
-        BaseScalarOperatorShuttle shuttle = new BaseScalarOperatorShuttle() {
-            @Override
-            public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
-                ScalarOperator tmp = replace(predicate);
-                return tmp != null ? tmp : super.visitBinaryPredicate(predicate, context);
-            }
+        try (PlannerProfile.ScopedTimer ignored3 =
+                     PlannerProfile.getScopedTimer("Optimizer.mvOptimize.replaceExprWithTarget")) {
+            BaseScalarOperatorShuttle shuttle = new BaseScalarOperatorShuttle() {
+                @Override
+                public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
+                    ScalarOperator tmp = replace(predicate);
+                    return tmp != null ? tmp : super.visitBinaryPredicate(predicate, context);
+                }
 
-            @Override
-            public ScalarOperator visitCall(CallOperator predicate, Void context) {
-                ScalarOperator tmp = replace(predicate);
-                return tmp != null ? tmp : super.visitCall(predicate, context);
-            }
+                @Override
+                public ScalarOperator visitCall(CallOperator predicate, Void context) {
+                    ScalarOperator tmp = replace(predicate);
+                    return tmp != null ? tmp : super.visitCall(predicate, context);
+                }
 
-            @Override
-            public ScalarOperator visitCastOperator(CastOperator cast, Void context) {
-                ScalarOperator tmp = replace(cast);
-                return tmp != null ? tmp : super.visitCastOperator(cast, context);
-            }
+                @Override
+                public ScalarOperator visitCastOperator(CastOperator cast, Void context) {
+                    ScalarOperator tmp = replace(cast);
+                    return tmp != null ? tmp : super.visitCastOperator(cast, context);
+                }
 
-            @Override
-            public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
-                ScalarOperator tmp = replace(variable);
-                return tmp != null ? tmp : super.visitVariableReference(variable, context);
-            }
+                @Override
+                public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
+                    ScalarOperator tmp = replace(variable);
+                    return tmp != null ? tmp : super.visitVariableReference(variable, context);
+                }
 
-            ScalarOperator replace(ScalarOperator scalarOperator) {
-                if (exprMap.containsKey(scalarOperator)) {
-                    Optional<ColumnRefOperator> mappedColumnRef = exprMap.get(scalarOperator).stream().findFirst();
-                    if (!mappedColumnRef.isPresent()) {
-                        return null;
-                    }
-                    if (columnMapping != null) {
-                        ColumnRefOperator replaced = columnMapping.get(mappedColumnRef.get());
-                        if (replaced == null) {
+                ScalarOperator replace(ScalarOperator scalarOperator) {
+                    if (exprMap.containsKey(scalarOperator)) {
+                        Optional<ColumnRefOperator> mappedColumnRef = exprMap.get(scalarOperator).stream().findFirst();
+                        if (!mappedColumnRef.isPresent()) {
                             return null;
                         }
-                        return replaced.clone();
-                    } else {
-                        return mappedColumnRef.get().clone();
+                        if (columnMapping != null) {
+                            ColumnRefOperator replaced = columnMapping.get(mappedColumnRef.get());
+                            if (replaced == null) {
+                                return null;
+                            }
+                            return replaced.clone();
+                        } else {
+                            return mappedColumnRef.get().clone();
+                        }
                     }
+                    return null;
                 }
-                return null;
-            }
-        };
-        return expr.accept(shuttle, null);
+            };
+            return expr.accept(shuttle, null);
+        }
     }
 
     private List<BiMap<Integer, Integer>> generateRelationIdMap(
