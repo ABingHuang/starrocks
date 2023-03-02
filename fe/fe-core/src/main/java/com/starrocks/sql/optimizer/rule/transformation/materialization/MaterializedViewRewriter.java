@@ -620,7 +620,7 @@ public class MaterializedViewRewriter {
 
             Multimap<ScalarOperator, ColumnRefOperator> normalizedMap;
             try (PlannerProfile.ScopedTimer ignored2 =
-                         PlannerProfile.getScopedTimer("Optimizer.mvOptimize.rewriteMVCompensationExpression")) {
+                         PlannerProfile.getScopedTimer("Optimizer.mvOptimize.rewriteMVCompensationExpression.normalize")) {
                 normalizedMap = normalizeAndReverseProjection(mvColumnRefToScalarOp, rewriteContext, isMVBased);
             }
             List<ScalarOperator> candidates = rewriteScalarOpToTarget(rewrittenConjuncts, normalizedMap,
@@ -813,29 +813,32 @@ public class MaterializedViewRewriter {
             Multimap<ScalarOperator, ColumnRefOperator> reversedMap = ArrayListMultimap.create();
             ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : columnRefMap.entrySet()) {
-                ScalarOperator rewritten = rewriteContext.getMvColumnRefRewriter().rewrite(entry.getValue());
-                ScalarOperator rewriteScalarOp;
-                if (isQueryAgainstView) {
-                    if (isViewBased) {
-                        rewriteScalarOp = columnRewriter.rewriteViewToQueryWithViewEc(rewritten);
-                    } else {
-                        rewriteScalarOp = columnRewriter.rewriteViewToQueryWithQueryEc(rewritten);
-                    }
+                try (PlannerProfile.ScopedTimer ignored =
+                             PlannerProfile.getScopedTimer("Optimizer.mvOptimize.normalizeAndReverseProjection.normalOneItem")) {
+                    ScalarOperator rewritten = rewriteContext.getMvColumnRefRewriter().rewrite(entry.getValue());
+                    ScalarOperator rewriteScalarOp;
+                    if (isQueryAgainstView) {
+                        if (isViewBased) {
+                            rewriteScalarOp = columnRewriter.rewriteViewToQueryWithViewEc(rewritten);
+                        } else {
+                            rewriteScalarOp = columnRewriter.rewriteViewToQueryWithQueryEc(rewritten);
+                        }
 
-                    // if rewriteScalarOp == rewritten and !rewritten.getUsedColumns().isEmpty(),
-                    // it means the rewritten can not be mapped from mv to query.
-                    // and ColumnRefOperator may conflict between mv and query(same id but not same name),
-                    // so do not put it into the reversedMap
-                    if (rewriteScalarOp != rewritten || rewritten.getUsedColumns().isEmpty()) {
+                        // if rewriteScalarOp == rewritten and !rewritten.getUsedColumns().isEmpty(),
+                        // it means the rewritten can not be mapped from mv to query.
+                        // and ColumnRefOperator may conflict between mv and query(same id but not same name),
+                        // so do not put it into the reversedMap
+                        if (rewriteScalarOp != rewritten || rewritten.getUsedColumns().isEmpty()) {
+                            reversedMap.put(rewriteScalarOp, entry.getKey());
+                        }
+                    } else {
+                        if (isViewBased) {
+                            rewriteScalarOp = columnRewriter.rewriteByViewEc(rewritten);
+                        } else {
+                            rewriteScalarOp = columnRewriter.rewriteByQueryEc(rewritten);
+                        }
                         reversedMap.put(rewriteScalarOp, entry.getKey());
                     }
-                } else {
-                    if (isViewBased) {
-                        rewriteScalarOp = columnRewriter.rewriteByViewEc(rewritten);
-                    } else {
-                        rewriteScalarOp = columnRewriter.rewriteByQueryEc(rewritten);
-                    }
-                    reversedMap.put(rewriteScalarOp, entry.getKey());
                 }
             }
             return reversedMap;
