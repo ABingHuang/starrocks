@@ -41,9 +41,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -69,23 +67,6 @@ public class MvRewritePreprocessor {
 
     public void prepareMvCandidatesForPlan() {
         List<Table> queryTables = MvUtils.getAllTables(logicOperatorTree);
-
-        // Construct queryPredicateSplit to avoid creating multi times for multi MVs.
-        // Compute Query queryPredicateSplit
-        final ColumnRefFactory queryColumnRefFactory = context.getColumnRefFactory();
-        final ReplaceColumnRefRewriter queryColumnRefRewriter =
-                MvUtils.getReplaceColumnRefWriter(logicOperatorTree, queryColumnRefFactory);
-        // Compensate partition predicates and add them into query predicate.
-        final ScalarOperator queryPartitionPredicate =
-                MvUtils.compensatePartitionPredicate(logicOperatorTree, queryColumnRefFactory);
-        if (queryPartitionPredicate == null) {
-            return;
-        }
-        ScalarOperator queryPredicate = MvUtils.rewriteOptExprCompoundPredicate(logicOperatorTree, queryColumnRefRewriter);
-        if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
-            queryPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
-        }
-        final PredicateSplit queryPredicateSplit = PredicateSplit.splitPredicate(queryPredicate);
 
         // get all related materialized views, include nested mvs
         Set<MaterializedView> relatedMvs =
@@ -122,7 +103,7 @@ public class MvRewritePreprocessor {
             MaterializationContext materializationContext =
                     new MaterializationContext(mv, mvPlan, queryColumnRefFactory,
                             mv.getPlanContext().getRefFactory(), partitionNamesToRefresh,
-                            baseTables, originQueryColumns, commonTables, queryPredicateSplit, queryColumnRefRewriter);
+                            baseTables, originQueryColumns, commonTables);
             // List<ColumnRefOperator> mvOutputColumns = mvOptimizer.getOutputExpressions();
             List<ColumnRefOperator> mvOutputColumns = mv.getPlanContext().getOutputColumns();
 
