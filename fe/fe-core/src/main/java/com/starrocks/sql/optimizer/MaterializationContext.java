@@ -50,7 +50,9 @@ public class MaterializationContext {
     private Set<ColumnRefOperator> originQueryColumns;
 
     // tables both in query and mv
-    private List<Table> commonTables;
+    private final List<Table> commonTables;
+
+    private List<Table> queryTables;
 
     public MaterializationContext(MaterializedView mv,
                                   OptExpression mvExpression,
@@ -140,5 +142,13 @@ public class MaterializationContext {
 
     public List<Table> getCommonTables() {
         return commonTables;
+    }
+
+    public List<Table> getQueryTables() {
+        return queryTables;
+    }
+
+    public void setQueryTables(List<Table> queryTables) {
+        this.queryTables = queryTables;
     }
 }

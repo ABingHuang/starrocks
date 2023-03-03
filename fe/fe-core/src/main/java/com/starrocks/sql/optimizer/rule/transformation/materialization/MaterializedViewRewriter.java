@@ -131,19 +131,11 @@ public class MaterializedViewRewriter {
         MatchMode matchMode;
         List<BiMap<Integer, Integer>> relationIdMappings;
         final EquivalenceClasses queryEc;
-        final List<Table> queryTables;
+        final List<Table> queryTables = materializationContext.getQueryTables();
         Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns = ArrayListMultimap.create();
         try (PlannerProfile.ScopedTimer ignored2 = PlannerProfile.getScopedTimer("Optimizer.mvOptimize.prepare")) {
             final OptExpression queryExpression = materializationContext.getQueryExpression();
             final OptExpression mvExpression = materializationContext.getMvExpression();
-            queryTables = MvUtils.getAllTables(queryExpression);
-            List<MaterializedView> usedMvs = materializationContext.getOptimizerContext().getUsedMvs(queryTables);
-            if (usedMvs != null && usedMvs.contains(materializationContext.getMv())) {
-                try (PlannerProfile.ScopedTimer ignored4 =
-                             PlannerProfile.getScopedTimer("Optimizer.mvOptimize.ignoreUsedMvs")) {
-                    return Lists.newArrayList();
-                }
-            }
             final List<Table> mvTables = MvUtils.getAllTables(mvExpression);
 
             // Check whether mv can be applicable for the query.
