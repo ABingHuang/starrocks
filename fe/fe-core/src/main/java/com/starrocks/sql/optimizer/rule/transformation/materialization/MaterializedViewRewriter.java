@@ -30,6 +30,7 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UniqueConstraint;
@@ -125,15 +126,24 @@ public class MaterializedViewRewriter {
 
     public List<OptExpression> rewrite(ReplaceColumnRefRewriter queryColumnRefRewriter,
                                        PredicateSplit queryPredicateSplit) {
+
         RewriteContext rewriteContext;
         MatchMode matchMode;
         List<BiMap<Integer, Integer>> relationIdMappings;
         final EquivalenceClasses queryEc;
+        final List<Table> queryTables;
         Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns = ArrayListMultimap.create();
         try (PlannerProfile.ScopedTimer ignored2 = PlannerProfile.getScopedTimer("Optimizer.mvOptimize.prepare")) {
             final OptExpression queryExpression = materializationContext.getQueryExpression();
             final OptExpression mvExpression = materializationContext.getMvExpression();
-            final List<Table> queryTables = MvUtils.getAllTables(queryExpression);
+            queryTables = MvUtils.getAllTables(queryExpression);
+            List<MaterializedView> usedMvs = materializationContext.getOptimizerContext().getUsedMvs(queryTables);
+            if (usedMvs != null && usedMvs.contains(materializationContext.getMv())) {
+                try (PlannerProfile.ScopedTimer ignored4 =
+                             PlannerProfile.getScopedTimer("Optimizer.mvOptimize.ignoreUsedMvs")) {
+                    return Lists.newArrayList();
+                }
+            }
             final List<Table> mvTables = MvUtils.getAllTables(mvExpression);
 
             // Check whether mv can be applicable for the query.
@@ -232,6 +242,7 @@ public class MaterializedViewRewriter {
             if (rewrittenExpression == null) {
                 continue;
             }
+            materializationContext.getOptimizerContext().updateUsedMv(queryTables, materializationContext.getMv());
             results.add(rewrittenExpression);
         }
 
