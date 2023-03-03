@@ -31,6 +31,8 @@ import com.starrocks.sql.optimizer.task.SeriallyTaskScheduler;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
 
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -151,13 +153,25 @@ public class OptimizerContext {
     }
 
     public void updateUsedMv(List<Table> tables, MaterializedView mv) {
-        List<Table> sortedTables = tables.stream().sorted().collect(Collectors.toList());
+        List<Table> sortedTables = tables.stream()
+                .sorted((left, right) -> left.getName().compareTo(right.getName())).collect(Collectors.toList());
         List<MaterializedView> mvs = usedMvs.computeIfAbsent(sortedTables, key -> Lists.newArrayList());
         mvs.add(mv);
     }
 
     public List<MaterializedView> getUsedMvs(List<Table> tables) {
-        List<Table> sortedTables = tables.stream().sorted().collect(Collectors.toList());
+        List<Table> sortedTables = tables.stream()
+                .sorted((left, right) -> left.getName().compareTo(right.getName())).collect(Collectors.toList());
+        /*
+        Collections.sort(tables, new Comparator<Table>() {
+            @Override
+            public int compare(Table t1, Table t2) {
+                return t1.getName().compareTo(t2.getName());
+            }
+        });
+
+         */
+
         return usedMvs.get(sortedTables);
     }
 }
