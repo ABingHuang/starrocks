@@ -105,7 +105,7 @@ public class PlannerProfile {
         }
 
         public long getTotalTime() {
-            return watch.elapsed(TimeUnit.MICROSECONDS) / 1000;
+            return watch.elapsed(TimeUnit.MICROSECONDS);
         }
 
         public int getTotalCount() {
@@ -122,7 +122,7 @@ public class PlannerProfile {
 
     private ScopedTimer getOrCreateScopedTimer(String name) {
         return timers.computeIfAbsent(name, key -> {
-            timePoint.put(name, timing.elapsed(TimeUnit.MICROSECONDS) / 1000);
+            timePoint.put(name, timing.elapsed(TimeUnit.MICROSECONDS));
             return new ScopedTimer(this, name);
         });
     }
