@@ -137,6 +137,32 @@ public class MaterializedViewRewriter {
             final OptExpression mvExpression = materializationContext.getMvExpression();
             final List<Table> mvTables = MvUtils.getAllTables(mvExpression);
 
+            // Only care MatchMode.COMPLETE and VIEW_DELTA here, QUERY_DELTA also can be supported
+            // because optimizer will match MV's pattern which is subset of query opt tree
+            // from top-down iteration.
+            matchMode = getMatchMode(queryTables, mvTables);
+            if (matchMode == MatchMode.COMPLETE) {
+                if (!isJoinMatch(queryExpression, mvExpression, queryTables, mvTables)) {
+                    try (PlannerProfile.ScopedTimer ignored5 =
+                                 PlannerProfile.getScopedTimer("Optimizer.mvOptimize.isJoinMatch")) {
+                        return Lists.newArrayList();
+                    }
+                }
+            } else if (matchMode == MatchMode.VIEW_DELTA) {
+                // only consider query with most common tables to optimize performance
+                if (!queryTables.containsAll(materializationContext.getCommonTables())) {
+                    try (PlannerProfile.ScopedTimer ignored5 =
+                                 PlannerProfile.getScopedTimer("Optimizer.mvOptimize.reduceViewDelta")) {
+                        return Lists.newArrayList();
+                    }
+                }
+            } else {
+                try (PlannerProfile.ScopedTimer ignored5 =
+                             PlannerProfile.getScopedTimer("Optimizer.mvOptimize.otherMatchMode")) {
+                    return Lists.newArrayList();
+                }
+            }
+
             // Check whether mv can be applicable for the query.
             if (!isMVApplicable(mvExpression, queryTables, mvTables)) {
                 try (PlannerProfile.ScopedTimer ignored5 =
@@ -172,26 +198,8 @@ public class MaterializedViewRewriter {
                 mvPredicateSplit = PredicateSplit.splitPredicate(mvPredicate);
             }
 
-            // Only care MatchMode.COMPLETE and VIEW_DELTA here, QUERY_DELTA also can be supported
-            // because optimizer will match MV's pattern which is subset of query opt tree
-            // from top-down iteration.
-            matchMode = getMatchMode(queryTables, mvTables);
             Map<Table, Set<Integer>> compensationRelations = Maps.newHashMap();
-            if (matchMode == MatchMode.COMPLETE) {
-                if (!isJoinMatch(queryExpression, mvExpression, queryTables, mvTables)) {
-                    try (PlannerProfile.ScopedTimer ignored5 =
-                                 PlannerProfile.getScopedTimer("Optimizer.mvOptimize.isJoinMatch")) {
-                        return Lists.newArrayList();
-                    }
-                }
-            } else if (matchMode == MatchMode.VIEW_DELTA) {
-                // only consider query with most common tables to optimize performance
-                if (!queryTables.containsAll(materializationContext.getCommonTables())) {
-                    try (PlannerProfile.ScopedTimer ignored5 =
-                                 PlannerProfile.getScopedTimer("Optimizer.mvOptimize.reduceViewDelta")) {
-                        return Lists.newArrayList();
-                    }
-                }
+            if (matchMode == MatchMode.VIEW_DELTA) {
                 ScalarOperator viewEqualPredicate = mvPredicateSplit.getEqualPredicates();
                 EquivalenceClasses viewEquivalenceClasses = createEquivalenceClasses(viewEqualPredicate);
                 if (!compensateViewDelta(viewEquivalenceClasses, queryExpression, mvExpression,
@@ -200,11 +208,6 @@ public class MaterializedViewRewriter {
                                  PlannerProfile.getScopedTimer("Optimizer.mvOptimize.compensateViewDelta")) {
                         return Lists.newArrayList();
                     }
-                }
-            } else {
-                try (PlannerProfile.ScopedTimer ignored5 =
-                             PlannerProfile.getScopedTimer("Optimizer.mvOptimize.otherMatchMode")) {
-                    return Lists.newArrayList();
                 }
             }
 
