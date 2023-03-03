@@ -172,7 +172,7 @@ public class MaterializedViewRewriter {
                 }
             } else if (matchMode == MatchMode.VIEW_DELTA) {
                 // only consider query with most common tables to optimize performance
-                if (queryTables.containsAll(materializationContext.getCommonTables())) {
+                if (!queryTables.containsAll(materializationContext.getCommonTables())) {
                     return Lists.newArrayList();
                 }
                 ScalarOperator viewEqualPredicate = mvPredicateSplit.getEqualPredicates();
