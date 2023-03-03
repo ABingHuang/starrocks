@@ -171,6 +171,10 @@ public class MaterializedViewRewriter {
                     return Lists.newArrayList();
                 }
             } else if (matchMode == MatchMode.VIEW_DELTA) {
+                // only consider query with most common tables to optimize performance
+                if (queryTables.containsAll(materializationContext.getCommonTables())) {
+                    return Lists.newArrayList();
+                }
                 ScalarOperator viewEqualPredicate = mvPredicateSplit.getEqualPredicates();
                 EquivalenceClasses viewEquivalenceClasses = createEquivalenceClasses(viewEqualPredicate);
                 if (!compensateViewDelta(viewEquivalenceClasses, queryExpression, mvExpression,

@@ -66,11 +66,11 @@ public class MvRewritePreprocessor {
     }
 
     public void prepareMvCandidatesForPlan() {
-        List<Table> tables = MvUtils.getAllTables(logicOperatorTree);
+        List<Table> queryTables = MvUtils.getAllTables(logicOperatorTree);
 
         // get all related materialized views, include nested mvs
         Set<MaterializedView> relatedMvs =
-                MvUtils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), tables);
+                MvUtils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), queryTables);
 
         Set<ColumnRefOperator> originQueryColumns = Sets.newHashSet(queryColumnRefFactory.getColumnRefs());
         for (MaterializedView mv : relatedMvs) {
@@ -99,9 +99,11 @@ public class MvRewritePreprocessor {
                 continue;
             }
             List<Table> baseTables = MvUtils.getAllTables(mvPlan);
+            List<Table> commonTables = baseTables.stream().filter(queryTables::contains).collect(Collectors.toList());
             MaterializationContext materializationContext =
                     new MaterializationContext(mv, mvPlan, queryColumnRefFactory,
-                            mv.getPlanContext().getRefFactory(), partitionNamesToRefresh, baseTables, originQueryColumns);
+                            mv.getPlanContext().getRefFactory(), partitionNamesToRefresh,
+                            baseTables, originQueryColumns, commonTables);
             // List<ColumnRefOperator> mvOutputColumns = mvOptimizer.getOutputExpressions();
             List<ColumnRefOperator> mvOutputColumns = mv.getPlanContext().getOutputColumns();
 
