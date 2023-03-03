@@ -124,9 +124,7 @@ public class MaterializedViewRewriter {
         return true;
     }
 
-    public List<OptExpression> rewrite(ReplaceColumnRefRewriter queryColumnRefRewriter,
-                                       PredicateSplit queryPredicateSplit) {
-
+    public List<OptExpression> rewrite() {
         RewriteContext rewriteContext;
         MatchMode matchMode;
         List<BiMap<Integer, Integer>> relationIdMappings;
@@ -212,12 +210,11 @@ public class MaterializedViewRewriter {
                 return Lists.newArrayList();
             }
             // used to judge whether query scalar ops can be rewritten
-            final List<ColumnRefOperator> scanMvOutputColumns =
-                    materializationContext.getScanMvOperator().getOutputColumns();
+            final PredicateSplit queryPredicateSplit = materializationContext.getQueryPredicateSplit();
             queryEc = createEquivalenceClasses(queryPredicateSplit.getEqualPredicates());
             rewriteContext = new RewriteContext(queryExpression, queryPredicateSplit, queryEc,
                     queryRelationIdToColumns, materializationContext.getQueryRefFactory(),
-                    queryColumnRefRewriter, mvExpression, mvPredicateSplit, mvRelationIdToColumns,
+                    materializationContext.getQueryColumnRefRewriter(), mvExpression, mvPredicateSplit, mvRelationIdToColumns,
                     materializationContext.getMvColumnRefFactory(), mvColumnRefRewriter,
                     materializationContext.getOutputMapping(), materializationContext.getOriginQueryColumns());
         }

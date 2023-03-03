@@ -20,19 +20,12 @@ import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVColumnPruner;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVPartitionPruner;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 
 import java.util.List;
 
@@ -52,22 +45,6 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         List<OptExpression> results = Lists.newArrayList();
 
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.mvOptimize")) {
-            // Construct queryPredicateSplit to avoid creating multi times for multi MVs.
-            // Compute Query queryPredicateSplit
-            final ColumnRefFactory queryColumnRefFactory = context.getColumnRefFactory();
-            final ReplaceColumnRefRewriter queryColumnRefRewriter =
-                    MvUtils.getReplaceColumnRefWriter(queryExpression, queryColumnRefFactory);
-            // Compensate partition predicates and add them into query predicate.
-            final ScalarOperator queryPartitionPredicate =
-                    MvUtils.compensatePartitionPredicate(queryExpression, queryColumnRefFactory);
-            if (queryPartitionPredicate == null) {
-                return Lists.newArrayList();
-            }
-            ScalarOperator queryPredicate = MvUtils.rewriteOptExprCompoundPredicate(queryExpression, queryColumnRefRewriter);
-            if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
-                queryPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
-            }
-            final PredicateSplit queryPredicateSplit = PredicateSplit.splitPredicate(queryPredicate);
 
             for (MaterializationContext mvContext : context.getCandidateMvs()) {
                 mvContext.setQueryExpression(queryExpression);
@@ -75,8 +52,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                 MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvContext);
                 List<OptExpression> candidates;
                 try (PlannerProfile.ScopedTimer ignored2 = PlannerProfile.getScopedTimer("Optimizer.mvOptimize.mvRewriter")) {
-                    candidates = mvRewriter.rewrite(queryColumnRefRewriter,
-                            queryPredicateSplit);
+                    candidates = mvRewriter.rewrite();
                 }
                 try (PlannerProfile.ScopedTimer ignored2 = PlannerProfile.getScopedTimer("Optimizer.mvOptimize.postRewrite")) {
                     candidates = postRewriteMV(context, candidates);
