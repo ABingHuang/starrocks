@@ -139,7 +139,10 @@ public class MaterializedViewRewriter {
 
             // Check whether mv can be applicable for the query.
             if (!isMVApplicable(mvExpression, queryTables, mvTables)) {
-                return Lists.newArrayList();
+                try (PlannerProfile.ScopedTimer ignored5 =
+                             PlannerProfile.getScopedTimer("Optimizer.mvOptimize.isMVApplicable")) {
+                    return Lists.newArrayList();
+                }
             }
 
             final ColumnRefFactory mvColumnRefFactory = materializationContext.getMvColumnRefFactory();
@@ -154,13 +157,20 @@ public class MaterializedViewRewriter {
             final ScalarOperator mvPartitionPredicate =
                     MvUtils.compensatePartitionPredicate(mvExpression, mvColumnRefFactory);
             if (mvPartitionPredicate == null) {
-                return Lists.newArrayList();
+                try (PlannerProfile.ScopedTimer ignored5 =
+                             PlannerProfile.getScopedTimer("Optimizer.mvOptimize.compensatePartitionPredicate")) {
+                    return Lists.newArrayList();
+                }
             }
-            ScalarOperator mvPredicate = MvUtils.rewriteOptExprCompoundPredicate(mvExpression, mvColumnRefRewriter);
-            if (!ConstantOperator.TRUE.equals(mvPartitionPredicate)) {
-                mvPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(mvPredicate, mvPartitionPredicate));
+            final PredicateSplit mvPredicateSplit;
+            try (PlannerProfile.ScopedTimer ignored5 =
+                         PlannerProfile.getScopedTimer("Optimizer.mvOptimize.mvPredicateSplit")) {
+                ScalarOperator mvPredicate = MvUtils.rewriteOptExprCompoundPredicate(mvExpression, mvColumnRefRewriter);
+                if (!ConstantOperator.TRUE.equals(mvPartitionPredicate)) {
+                    mvPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(mvPredicate, mvPartitionPredicate));
+                }
+                mvPredicateSplit = PredicateSplit.splitPredicate(mvPredicate);
             }
-            final PredicateSplit mvPredicateSplit = PredicateSplit.splitPredicate(mvPredicate);
 
             // Only care MatchMode.COMPLETE and VIEW_DELTA here, QUERY_DELTA also can be supported
             // because optimizer will match MV's pattern which is subset of query opt tree
@@ -169,21 +179,33 @@ public class MaterializedViewRewriter {
             Map<Table, Set<Integer>> compensationRelations = Maps.newHashMap();
             if (matchMode == MatchMode.COMPLETE) {
                 if (!isJoinMatch(queryExpression, mvExpression, queryTables, mvTables)) {
-                    return Lists.newArrayList();
+                    try (PlannerProfile.ScopedTimer ignored5 =
+                                 PlannerProfile.getScopedTimer("Optimizer.mvOptimize.isJoinMatch")) {
+                        return Lists.newArrayList();
+                    }
                 }
             } else if (matchMode == MatchMode.VIEW_DELTA) {
                 // only consider query with most common tables to optimize performance
                 if (!queryTables.containsAll(materializationContext.getCommonTables())) {
-                    return Lists.newArrayList();
+                    try (PlannerProfile.ScopedTimer ignored5 =
+                                 PlannerProfile.getScopedTimer("Optimizer.mvOptimize.reduceViewDelta")) {
+                        return Lists.newArrayList();
+                    }
                 }
                 ScalarOperator viewEqualPredicate = mvPredicateSplit.getEqualPredicates();
                 EquivalenceClasses viewEquivalenceClasses = createEquivalenceClasses(viewEqualPredicate);
                 if (!compensateViewDelta(viewEquivalenceClasses, queryExpression, mvExpression,
                         materializationContext.getQueryRefFactory(), compensationJoinColumns, compensationRelations)) {
-                    return Lists.newArrayList();
+                    try (PlannerProfile.ScopedTimer ignored5 =
+                                 PlannerProfile.getScopedTimer("Optimizer.mvOptimize.compensateViewDelta")) {
+                        return Lists.newArrayList();
+                    }
                 }
             } else {
-                return Lists.newArrayList();
+                try (PlannerProfile.ScopedTimer ignored5 =
+                             PlannerProfile.getScopedTimer("Optimizer.mvOptimize.otherMatchMode")) {
+                    return Lists.newArrayList();
+                }
             }
 
             final Map<Integer, Map<String, ColumnRefOperator>> queryRelationIdToColumns =
@@ -195,16 +217,17 @@ public class MaterializedViewRewriter {
             // there may be two mapping:
             //    1. A1 -> A1, A2 -> A2, B -> B
             //    2. A1 -> A2, A2 -> A1, B -> B
-            relationIdMappings = generateRelationIdMap(
-                    materializationContext.getQueryRefFactory(),
-                    queryTables, queryExpression, materializationContext.getMvColumnRefFactory(),
-                    mvTables, mvExpression, matchMode, compensationRelations);
+            try (PlannerProfile.ScopedTimer ignored5 =
+                         PlannerProfile.getScopedTimer("Optimizer.mvOptimize.generateRelationIdMap")) {
+                relationIdMappings = generateRelationIdMap(
+                        materializationContext.getQueryRefFactory(),
+                        queryTables, queryExpression, materializationContext.getMvColumnRefFactory(),
+                        mvTables, mvExpression, matchMode, compensationRelations);
+            }
             if (relationIdMappings.isEmpty()) {
                 return Lists.newArrayList();
             }
-            // used to judge whether query scalar ops can be rewritten
-            final List<ColumnRefOperator> scanMvOutputColumns =
-                    materializationContext.getScanMvOperator().getOutputColumns();
+
             queryEc = createEquivalenceClasses(queryPredicateSplit.getEqualPredicates());
             rewriteContext = new RewriteContext(queryExpression, queryPredicateSplit, queryEc,
                     queryRelationIdToColumns, materializationContext.getQueryRefFactory(),
