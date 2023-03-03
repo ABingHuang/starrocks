@@ -73,17 +73,31 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             // Construct queryPredicateSplit to avoid creating multi times for multi MVs.
             // Compute Query queryPredicateSplit
             final ColumnRefFactory queryColumnRefFactory = context.getColumnRefFactory();
-            final ReplaceColumnRefRewriter queryColumnRefRewriter =
-                    MvUtils.getReplaceColumnRefWriter(queryExpression, queryColumnRefFactory);
+            final ReplaceColumnRefRewriter queryColumnRefRewriter;
+            try (PlannerProfile.ScopedTimer ignored2 =
+                         PlannerProfile.getScopedTimer("Optimizer.mvOptimize.queryColumnRefRewriter")) {
+                queryColumnRefRewriter =
+                        MvUtils.getReplaceColumnRefWriter(queryExpression, queryColumnRefFactory);
+            }
             // Compensate partition predicates and add them into query predicate.
-            final ScalarOperator queryPartitionPredicate =
-                    MvUtils.compensatePartitionPredicate(queryExpression, queryColumnRefFactory);
+            final ScalarOperator queryPartitionPredicate;
+            try (PlannerProfile.ScopedTimer ignored2 =
+                         PlannerProfile.getScopedTimer("Optimizer.mvOptimize.queryPartitionPredicate")) {
+                queryPartitionPredicate =
+                        MvUtils.compensatePartitionPredicate(queryExpression, queryColumnRefFactory);
+            }
             if (queryPartitionPredicate == null) {
                 return Lists.newArrayList();
             }
-            ScalarOperator queryPredicate = MvUtils.rewriteOptExprCompoundPredicate(queryExpression, queryColumnRefRewriter);
+            ScalarOperator queryPredicate;
+            try (PlannerProfile.ScopedTimer ignored2 = PlannerProfile.getScopedTimer("Optimizer.mvOptimize.queryPredicate")) {
+                queryPredicate = MvUtils.rewriteOptExprCompoundPredicate(queryExpression, queryColumnRefRewriter);
+            }
             if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
-                queryPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
+                try (PlannerProfile.ScopedTimer ignored2 =
+                             PlannerProfile.getScopedTimer("Optimizer.mvOptimize.canonizeQueryPredicate")) {
+                    queryPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
+                }
             }
             final PredicateSplit queryPredicateSplit = PredicateSplit.splitPredicate(queryPredicate);
 
