@@ -865,9 +865,9 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             return root;
         }
 
-        List<LogicalOlapScanOperator> scanOperators = taskContext.getAllScanOperators();
+        List<PhysicalOlapScanOperator> scanOperators = Utils.extractPhysicalOlapScanOperator(root);
 
-        for (LogicalOlapScanOperator scanOperator : scanOperators) {
+        for (PhysicalOlapScanOperator scanOperator : scanOperators) {
             OlapTable table = (OlapTable) scanOperator.getTable();
             long version = table.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo)
                     .orElse(0L);
