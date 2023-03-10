@@ -304,7 +304,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildPartitionRefreshNumber() {
         partitionRefreshNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER,
-                String.valueOf(INVALID)));
+                String.valueOf(1)));
         return this;
     }
 
