@@ -921,6 +921,8 @@ public class ReportHandler extends Daemon {
                             // update counter
                             ++addToMetaCounter;
                         } catch (MetaNotFoundException e) {
+                            LOG.warn("add replica failed.", e);
+                            LOG.info("need delete tablet:{}, backendId:{}", tabletId, backendId);
                             // Enough replica causing replica add failed should be treated as a normal
                             // case to avoid too many useless warning logs. This will happen when a clone task
                             // finished for decommission or balance, and the redundant replica has been deleted
@@ -938,6 +940,7 @@ public class ReportHandler extends Daemon {
                 }
 
                 if (needDelete && maxTaskSendPerBe > 0) {
+                    LOG.info("need delete tablet:{}, backendId:{}", tabletId, backendId);
                     // drop replica
                     addDropReplicaTask(batchTask, backendId, tabletId,
                             backendTabletInfo.getSchema_hash(), "not found in meta");
@@ -950,6 +953,7 @@ public class ReportHandler extends Daemon {
                 // this tablet is found in meta but with invalid schema hash.
                 // delete it.
                 int schemaHash = foundTabletsWithInvalidSchema.get(tabletId).getSchema_hash();
+                LOG.info("need delete2 tablet:{}, backendId:{}", tabletId, backendId);
                 addDropReplicaTask(batchTask, backendId, tabletId, schemaHash,
                         "invalid schema hash: " + schemaHash);
                 ++deleteFromBackendCounter;
