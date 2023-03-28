@@ -895,6 +895,8 @@ public class ReportHandler extends Daemon {
                 // We need to clean these ghost tablets from current backend, or else it will
                 // continue to report them to FE forever and add some processing overhead(the tablet report
                 // process is protected with DB S lock).
+                LOG.warn("start to delete tablet:{} backendId:{}, isForce:{}",
+                        tabletId, backendId, invertedIndex.tabletForceDelete(tabletId));
                 addDropReplicaTask(batchTask, backendId, tabletId,
                         -1 /* Unknown schema hash */, "not found in meta", invertedIndex.tabletForceDelete(tabletId));
                 if (!FeConstants.runningUnitTest) {
@@ -922,7 +924,8 @@ public class ReportHandler extends Daemon {
                             ++addToMetaCounter;
                         } catch (MetaNotFoundException e) {
                             LOG.warn("add replica failed.", e);
-                            LOG.info("need delete tablet:{}, backendId:{}", tabletId, backendId);
+                            LOG.info("need delete tablet:{}, backendId:{}, isForce:{}",
+                                    tabletId, backendId, invertedIndex.tabletForceDelete(tabletId));
                             // Enough replica causing replica add failed should be treated as a normal
                             // case to avoid too many useless warning logs. This will happen when a clone task
                             // finished for decommission or balance, and the redundant replica has been deleted
