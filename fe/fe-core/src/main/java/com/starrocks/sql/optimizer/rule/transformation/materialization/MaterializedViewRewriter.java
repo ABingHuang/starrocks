@@ -1175,6 +1175,10 @@ public class MaterializedViewRewriter {
         }
         Projection newProjection = new Projection(newQueryProjection);
         mvOptExpr.getOp().setProjection(newProjection);
+        // copy limit into rewritten plan
+        if (rewriteContext.getQueryExpression().getOp().hasLimit()) {
+            mvOptExpr.getOp().setLimit(rewriteContext.getQueryExpression().getOp().getLimit());
+        }
         return mvOptExpr;
     }
 
