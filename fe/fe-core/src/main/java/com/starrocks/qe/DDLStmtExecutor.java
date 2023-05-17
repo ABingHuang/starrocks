@@ -18,6 +18,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -27,6 +29,10 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -297,10 +303,27 @@ public class DDLStmtExecutor {
                                                                    ConnectContext context) {
             List<String> info = Lists.newArrayList();
             ErrorReport.wrapWithRuntimeException(() -> {
-                // The priority of manual refresh is higher than that of general refresh
-                String taskId = context.getGlobalStateMgr().getLocalMetastore()
-                        .refreshMaterializedView(stmt, Constants.TaskRunPriority.HIGH.value());
-                info.add(taskId);
+                if (stmt.isSync()) {
+                    if (stmt.isSync()) {
+                        Database db = GlobalStateMgr.getCurrentState().getDb(stmt.getMvName().getDb());
+                        MaterializedView mv = (MaterializedView) db.getTable(stmt.getMvName().getTbl());
+                        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+                        final String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
+                        if (!taskManager.containTask(mvTaskName)) {
+                            throw new DdlException(String.format("submit database:%s mv:%s refresh task failed",
+                                    db.getFullName(), mv.getName()));
+                        }
+                        Task refreshTask = taskManager.getTask(mvTaskName);
+                        // get current task run and wait for current task run?
+                        // why not fresh it with task run?
+                        // refreshTask
+                    }
+                } else {
+                    // The priority of manual refresh is higher than that of general refresh
+                    String taskId = context.getGlobalStateMgr().getLocalMetastore()
+                            .refreshMaterializedView(stmt, Constants.TaskRunPriority.HIGH.value());
+                    info.add(taskId);
+                }
             });
 
             return new ShowResultSet(RefreshMaterializedViewStatement.META_DATA, Arrays.asList(info));
