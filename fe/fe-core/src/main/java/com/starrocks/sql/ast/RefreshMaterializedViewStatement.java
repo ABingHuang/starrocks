@@ -19,16 +19,13 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
-import org.apache.commons.lang3.StringUtils;
 
 public class RefreshMaterializedViewStatement extends DdlStmt {
-    private final static String SYNC = "__SYNC__";
-    private final static String ASYNC = "__ASYNC__";
 
     private final TableName mvName;
     private final PartitionRangeDesc partitionRangeDesc;
     private final boolean forceRefresh;
-    private final String syncHint;
+    private final boolean isSync;
 
     public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
@@ -37,18 +34,18 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
 
     public RefreshMaterializedViewStatement(TableName mvName,
                                             PartitionRangeDesc partitionRangeDesc,
-                                            boolean forceRefresh, String syncHint) {
-        this(mvName, partitionRangeDesc, forceRefresh, syncHint, NodePosition.ZERO);
+                                            boolean forceRefresh, boolean isSync) {
+        this(mvName, partitionRangeDesc, forceRefresh, isSync, NodePosition.ZERO);
     }
 
     public RefreshMaterializedViewStatement(TableName mvName,
                                             PartitionRangeDesc partitionRangeDesc,
-                                            boolean forceRefresh, String syncHint, NodePosition pos) {
+                                            boolean forceRefresh, boolean isSync, NodePosition pos) {
         super(pos);
         this.mvName = mvName;
         this.partitionRangeDesc = partitionRangeDesc;
         this.forceRefresh = forceRefresh;
-        this.syncHint = syncHint;
+        this.isSync = isSync;
     }
 
     public TableName getMvName() {
@@ -68,17 +65,7 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
         return forceRefresh;
     }
 
-    public boolean checkIsValidSyncHint() {
-        return syncHint.isEmpty()
-                || StringUtils.upperCase(syncHint).equals(SYNC)
-                || StringUtils.upperCase(syncHint).equals(ASYNC);
-    }
-
-    public String getSyncHint() {
-        return syncHint;
-    }
-
     public boolean isSync() {
-        return StringUtils.upperCase(syncHint).equals(SYNC);
+        return isSync;
     }
 }

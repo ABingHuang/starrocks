@@ -1651,11 +1651,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             partitionRangeDesc =
                     (PartitionRangeDesc) visit(context.partitionRangeDesc());
         }
-        String syncHint = "";
-        if (context.bracketHint() != null) {
-            syncHint = ((Identifier) visit(context.bracketHint().identifier().get(0))).getValue();
-        }
-        return new RefreshMaterializedViewStatement(mvName, partitionRangeDesc, context.FORCE() != null, syncHint,
+        return new RefreshMaterializedViewStatement(mvName, partitionRangeDesc, context.FORCE() != null,
+                context.SYNC() != null,
                 createPos(context));
     }
 

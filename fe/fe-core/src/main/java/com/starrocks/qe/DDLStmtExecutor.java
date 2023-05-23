@@ -19,7 +19,6 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -304,20 +303,17 @@ public class DDLStmtExecutor {
             List<String> info = Lists.newArrayList();
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (stmt.isSync()) {
-                    if (stmt.isSync()) {
-                        Database db = GlobalStateMgr.getCurrentState().getDb(stmt.getMvName().getDb());
-                        MaterializedView mv = (MaterializedView) db.getTable(stmt.getMvName().getTbl());
-                        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-                        final String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
-                        if (!taskManager.containTask(mvTaskName)) {
-                            throw new DdlException(String.format("submit database:%s mv:%s refresh task failed",
-                                    db.getFullName(), mv.getName()));
-                        }
-                        Task refreshTask = taskManager.getTask(mvTaskName);
-                        // get current task run and wait for current task run?
-                        // why not fresh it with task run?
-                        // refreshTask
+                    Database db = GlobalStateMgr.getCurrentState().getDb(stmt.getMvName().getDb());
+                    MaterializedView mv = (MaterializedView) db.getTable(stmt.getMvName().getTbl());
+                    TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+                    final String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
+                    Task task = taskManager.getTask(mvTaskName);
+                    if (task == null) {
+                        task = TaskBuilder.buildMvTask(mv, "test");
+                        TaskBuilder.updateTaskInfo(task, mv);
+                        taskManager.createTask(task, false);
                     }
+                    taskManager.executeTaskSync(task);
                 } else {
                     // The priority of manual refresh is higher than that of general refresh
                     String taskId = context.getGlobalStateMgr().getLocalMetastore()

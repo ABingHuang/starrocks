@@ -54,7 +54,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -293,12 +292,31 @@ public class TaskManager {
         return taskRunManager.killTaskRun(task.getId());
     }
 
-    public Constants.TaskRunState executeTaskSync(String taskName) throws ExecutionException, InterruptedException {
+    public Constants.TaskRunState executeTaskSync(Task task) {
+        return executeTaskSync(task, new ExecuteOption());
+    }
+
+    public Constants.TaskRunState executeTaskSync(Task task, ExecuteOption option) {
+        if (!tryTaskLock()) {
+            throw new DmlException("Failed to get task lock when execute Task sync[" + task.getName() + "]");
+        }
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        SubmitResult submitResult = taskRunManager.submitTaskRun(taskRun, option);
+        if (submitResult.getStatus() != SUBMITTED) {
+            throw new DmlException("execute task:" + task.getName() + " failed");
+        }
+        try {
+            return taskRun.getFuture().get();
+        } catch (Exception e) {
+            throw new DmlException("execute task: %s failed.", e, task.getName());
+        }
+    }
+
+    public Constants.TaskRunState executeTaskSync(String taskName) {
         return executeTaskSync(taskName, new ExecuteOption());
     }
 
-    public Constants.TaskRunState executeTaskSync(String taskName, ExecuteOption option)
-            throws ExecutionException, InterruptedException {
+    public Constants.TaskRunState executeTaskSync(String taskName, ExecuteOption option) {
         Task task = nameToTaskMap.get(taskName);
         if (task == null) {
             throw new DmlException("execute task:" + taskName + " failed");
@@ -308,7 +326,11 @@ public class TaskManager {
         if (submitResult.getStatus() != SUBMITTED) {
             throw new DmlException("execute task:" + taskName + " failed");
         }
-        return taskRun.getFuture().get();
+        try {
+            return taskRun.getFuture().get();
+        } catch (Exception e) {
+            throw new DmlException("execute task: %s failed.", e, taskName);
+        }
     }
 
     public SubmitResult executeTask(String taskName) {
@@ -779,10 +801,24 @@ public class TaskManager {
     }
 
     public boolean containTask(String taskName) {
-        return nameToTaskMap.containsKey(taskName);
+        if (!tryTaskLock()) {
+            throw new DmlException("Failed to get task lock when check Task [" + taskName + "]");
+        }
+        try {
+            return nameToTaskMap.containsKey(taskName);
+        } finally {
+            taskUnlock();
+        }
     }
 
     public Task getTask(String taskName) {
-        return nameToTaskMap.get(taskName);
+        if (!tryTaskLock()) {
+            throw new DmlException("Failed to get task lock when check Task [" + taskName + "]");
+        }
+        try {
+            return nameToTaskMap.get(taskName);
+        } finally {
+            taskUnlock();
+        }
     }
 }

@@ -914,10 +914,6 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException(
                         "Unsupported batch partition build type:" + partitionColumn.getType());
             }
-            if (statement.checkIsValidSyncHint()) {
-                throw new SemanticException(
-                        "Unsupported refresh sync hint:" + statement.getSyncHint());
-            }
             return null;
         }
 
