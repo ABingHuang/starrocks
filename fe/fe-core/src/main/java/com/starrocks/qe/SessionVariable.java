@@ -1542,6 +1542,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return transactionVisibleWaitTimeout;
     }
 
+    public void setTransactionVisibleWaitTimeout(long transactionVisibleWaitTimeout) {
+        this.transactionVisibleWaitTimeout = transactionVisibleWaitTimeout;
+    }
+
     public boolean getForceScheduleLocal() {
         return forceScheduleLocal;
     }
