@@ -309,7 +309,7 @@ public class DDLStmtExecutor {
                     final String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
                     Task task = taskManager.getTask(mvTaskName);
                     if (task == null) {
-                        task = TaskBuilder.buildMvTask(mv, "test");
+                        task = TaskBuilder.buildMvTask(mv, db.getFullName());
                         TaskBuilder.updateTaskInfo(task, mv);
                         taskManager.createTask(task, false);
                     }
@@ -317,9 +317,9 @@ public class DDLStmtExecutor {
                     info.add(taskRunId);
                 } else {
                     // The priority of manual refresh is higher than that of general refresh
-                    String taskId = context.getGlobalStateMgr().getLocalMetastore()
+                    String taskRunId = context.getGlobalStateMgr().getLocalMetastore()
                             .refreshMaterializedView(stmt, Constants.TaskRunPriority.HIGH.value());
-                    info.add(taskId);
+                    info.add(taskRunId);
                 }
             });
 

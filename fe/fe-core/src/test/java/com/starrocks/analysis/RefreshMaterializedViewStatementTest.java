@@ -100,12 +100,13 @@ public class RefreshMaterializedViewStatementTest {
 
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         final String mvTaskName = TaskBuilder.getMvTaskName(mv1.getId());
+        Task task = taskManager.getTask(mvTaskName);
         if (!taskManager.containTask(mvTaskName)) {
-            Task task = TaskBuilder.buildMvTask(mv1, "test");
+            task = TaskBuilder.buildMvTask(mv1, "test");
             TaskBuilder.updateTaskInfo(task, mv1);
             taskManager.createTask(task, false);
         }
-        taskManager.executeTaskSync(mvTaskName);
+        taskManager.executeTaskSync(task);
         MaterializedView.MvRefreshScheme refreshScheme = mv1.getRefreshScheme();
         Assert.assertNotNull(refreshScheme);
         System.out.println("visibleVersionMap:" + refreshScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap());
