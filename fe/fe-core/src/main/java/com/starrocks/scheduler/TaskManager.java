@@ -317,27 +317,6 @@ public class TaskManager {
         }
     }
 
-    public Constants.TaskRunState executeTaskSync(String taskName) {
-        return executeTaskSync(taskName, new ExecuteOption());
-    }
-
-    public Constants.TaskRunState executeTaskSync(String taskName, ExecuteOption option) {
-        Task task = nameToTaskMap.get(taskName);
-        if (task == null) {
-            throw new DmlException("execute task:" + taskName + " failed");
-        }
-        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
-        SubmitResult submitResult = taskRunManager.submitTaskRun(taskRun, option);
-        if (submitResult.getStatus() != SUBMITTED) {
-            throw new DmlException("execute task:" + taskName + " failed");
-        }
-        try {
-            return taskRun.getFuture().get();
-        } catch (Exception e) {
-            throw new DmlException("execute task: %s failed.", e, taskName);
-        }
-    }
-
     public SubmitResult executeTask(String taskName) {
         return executeTask(taskName, new ExecuteOption());
     }
