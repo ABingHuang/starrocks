@@ -360,7 +360,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         final String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
         Task task = taskManager.getTask(mvTaskName);
-        if (!taskManager.containTask(mvTaskName)) {
+        if (task == null) {
             task = TaskBuilder.buildMvTask(mv, dbName);
             TaskBuilder.updateTaskInfo(task, mv);
             taskManager.createTask(task, false);

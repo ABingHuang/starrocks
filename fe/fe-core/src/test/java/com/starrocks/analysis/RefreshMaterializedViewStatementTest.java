@@ -101,7 +101,7 @@ public class RefreshMaterializedViewStatementTest {
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         final String mvTaskName = TaskBuilder.getMvTaskName(mv1.getId());
         Task task = taskManager.getTask(mvTaskName);
-        if (!taskManager.containTask(mvTaskName)) {
+        if (task == null) {
             task = TaskBuilder.buildMvTask(mv1, "test");
             TaskBuilder.updateTaskInfo(task, mv1);
             taskManager.createTask(task, false);

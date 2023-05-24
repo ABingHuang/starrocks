@@ -444,7 +444,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         // wait util transaction is visible for mv refresh task
         // because mv will update base tables' visible version after insert, the mv's visible version
         // should keep up with the base tables, or it will return outdated result.
-        context.ctx.getSessionVariable().setTransactionVisibleWaitTimeout(Long.MAX_VALUE);
+        context.ctx.getSessionVariable().setTransactionVisibleWaitTimeout(Long.MAX_VALUE / 1000);
         mvContext = new MvTaskRunContext(context);
     }
 
