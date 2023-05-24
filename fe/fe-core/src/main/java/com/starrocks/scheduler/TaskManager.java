@@ -297,23 +297,25 @@ public class TaskManager {
     }
 
     public String executeTaskSync(Task task, ExecuteOption option) {
+        TaskRun taskRun;
+        SubmitResult submitResult;
         if (!tryTaskLock()) {
             throw new DmlException("Failed to get task lock when execute Task sync[" + task.getName() + "]");
         }
         try {
-            TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
-            SubmitResult submitResult = taskRunManager.submitTaskRun(taskRun, option);
+            taskRun = TaskRunBuilder.newBuilder(task).build();
+            submitResult = taskRunManager.submitTaskRun(taskRun, option);
             if (submitResult.getStatus() != SUBMITTED) {
                 throw new DmlException("execute task:" + task.getName() + " failed");
             }
-            try {
-                taskRun.getFuture().get();
-                return submitResult.getQueryId();
-            } catch (Exception e) {
-                throw new DmlException("execute task: %s failed.", e, task.getName());
-            }
         } finally {
             taskUnlock();
+        }
+        try {
+            taskRun.getFuture().get();
+            return submitResult.getQueryId();
+        } catch (Exception e) {
+            throw new DmlException("execute task: %s failed.", e, task.getName());
         }
     }
 
