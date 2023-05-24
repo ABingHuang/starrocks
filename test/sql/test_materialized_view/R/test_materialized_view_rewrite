@@ -33,7 +33,7 @@ select count(*) from user_tags_mv1;
 -- result:
 3
 -- !result
-select user_id from user_tags_mv1;
+select user_id from user_tags_mv1 order by user_id;
 -- result:
 1
 2
