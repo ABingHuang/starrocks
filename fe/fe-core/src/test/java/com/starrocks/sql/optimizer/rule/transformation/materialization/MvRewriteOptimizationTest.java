@@ -2414,19 +2414,6 @@ public class MvRewriteOptimizationTest {
 
     private void refreshMaterializedView(String dbName, String mvName) throws SQLException {
         cluster.runSql(dbName, String.format("refresh materialized view %s with sync mode", mvName));
-        /*
-        MaterializedView mv = getMv(dbName, mvName);
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        final String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
-        Task task = taskManager.getTask(mvTaskName);
-        if (task == null) {
-            task = TaskBuilder.buildMvTask(mv, dbName);
-            TaskBuilder.updateTaskInfo(task, mv);
-            taskManager.createTask(task, false);
-        }
-        taskManager.executeTaskSync(task);
-
-         */
     }
 
     private void createAndRefreshMv(String dbName, String mvName, String sql) throws Exception {
