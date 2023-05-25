@@ -18,7 +18,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -27,11 +26,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.load.EtlJobType;
-import com.starrocks.scheduler.Constants;
-import com.starrocks.scheduler.Task;
-import com.starrocks.scheduler.TaskBuilder;
-import com.starrocks.scheduler.TaskManager;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -302,25 +296,9 @@ public class DDLStmtExecutor {
                                                                    ConnectContext context) {
             List<String> info = Lists.newArrayList();
             ErrorReport.wrapWithRuntimeException(() -> {
-                if (stmt.isSync()) {
-                    Database db = GlobalStateMgr.getCurrentState().getDb(stmt.getMvName().getDb());
-                    MaterializedView mv = (MaterializedView) db.getTable(stmt.getMvName().getTbl());
-                    TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-                    final String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
-                    Task task = taskManager.getTask(mvTaskName);
-                    if (task == null) {
-                        task = TaskBuilder.buildMvTask(mv, db.getFullName());
-                        TaskBuilder.updateTaskInfo(task, mv);
-                        taskManager.createTask(task, false);
-                    }
-                    String taskRunId = taskManager.executeTaskSync(task, context);
-                    info.add(taskRunId);
-                } else {
-                    // The priority of manual refresh is higher than that of general refresh
-                    String taskRunId = context.getGlobalStateMgr().getLocalMetastore()
-                            .refreshMaterializedView(stmt, Constants.TaskRunPriority.HIGH.value());
-                    info.add(taskRunId);
-                }
+                // The priority of manual refresh is higher than that of general refresh
+                String taskRunId = context.getGlobalStateMgr().getLocalMetastore().refreshMaterializedView(stmt);
+                info.add(taskRunId);
             });
 
             return new ShowResultSet(RefreshMaterializedViewStatement.META_DATA, Arrays.asList(info));

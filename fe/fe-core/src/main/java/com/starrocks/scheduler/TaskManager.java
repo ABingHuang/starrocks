@@ -292,6 +292,7 @@ public class TaskManager {
         return taskRunManager.killTaskRun(task.getId());
     }
 
+    /*
     public String executeTaskSync(Task task, ConnectContext context) {
         return executeTaskSync(task, new ExecuteOption(), context);
     }
@@ -318,7 +319,8 @@ public class TaskManager {
         try {
             Constants.TaskRunState taskRunState = taskRun.getFuture().get();
             if (taskRunState != Constants.TaskRunState.SUCCESS) {
-                throw new DmlException("execute task: %s failed. task run state:%s", task.getName(), taskRunState);
+                throw new DmlException("execute task: %s failed. task source:%s, task run state:%s",
+                        task.getName(), task.getSource(), taskRunState);
             }
             return submitResult.getQueryId();
         } catch (Exception e) {
@@ -326,18 +328,68 @@ public class TaskManager {
         }
     }
 
+     */
+
     public SubmitResult executeTask(String taskName) {
         return executeTask(taskName, new ExecuteOption());
     }
 
     public SubmitResult executeTask(String taskName, ExecuteOption option) {
-        Task task = nameToTaskMap.get(taskName);
-        if (task == null) {
-            return new SubmitResult(null, SubmitResult.SubmitStatus.FAILED);
+        if (!tryTaskLock()) {
+            throw new DmlException("Failed to get task lock when execute Task sync[" + taskName + "]");
         }
+        Task task;
+        try {
+            task = nameToTaskMap.get(taskName);
+            if (task == null) {
+                return new SubmitResult(null, SubmitResult.SubmitStatus.FAILED);
+            }
+        } finally {
+            taskUnlock();
+        }
+        if (option.getIsSync()) {
+            return executeTaskSync(task, option);
+        } else {
+            return executeTaskAsync(task, option);
+        }
+    }
+
+    // for test
+    public SubmitResult executeTaskSync(Task task) {
+        return executeTaskSync(task, new ExecuteOption());
+    }
+
+    public SubmitResult executeTaskSync(Task task, ExecuteOption option) {
+        TaskRun taskRun;
+        SubmitResult submitResult;
+        if (!tryTaskLock()) {
+            throw new DmlException("Failed to get task lock when execute Task sync[" + task.getName() + "]");
+        }
+        try {
+            taskRun = TaskRunBuilder.newBuilder(task).setConnectContext(ConnectContext.get()).build();
+            submitResult = taskRunManager.submitTaskRun(taskRun, option);
+            if (submitResult.getStatus() != SUBMITTED) {
+                throw new DmlException("execute task:" + task.getName() + " failed");
+            }
+        } finally {
+            taskUnlock();
+        }
+        try {
+            Constants.TaskRunState taskRunState = taskRun.getFuture().get();
+            if (taskRunState != Constants.TaskRunState.SUCCESS) {
+                throw new DmlException("execute task: %s failed. task source:%s, task run state:%s",
+                        task.getName(), task.getSource(), taskRunState);
+            }
+            return submitResult;
+        } catch (Exception e) {
+            throw new DmlException("execute task: %s failed.", e, task.getName());
+        }
+    }
+
+    public SubmitResult executeTaskAsync(Task task, ExecuteOption option) {
         return taskRunManager
                 .submitTaskRun(TaskRunBuilder.newBuilder(task).properties(option.getTaskRunProperties()).type(option).
-                                build(), option);
+                        build(), option);
     }
 
     public void dropTasks(List<Long> taskIdList, boolean isReplay) {
