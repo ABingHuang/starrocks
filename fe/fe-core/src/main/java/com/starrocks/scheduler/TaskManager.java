@@ -292,18 +292,22 @@ public class TaskManager {
         return taskRunManager.killTaskRun(task.getId());
     }
 
-    public String executeTaskSync(Task task) {
-        return executeTaskSync(task, new ExecuteOption());
+    public String executeTaskSync(Task task, ConnectContext context) {
+        return executeTaskSync(task, new ExecuteOption(), context);
     }
 
-    public String executeTaskSync(Task task, ExecuteOption option) {
+    public String executeTaskSync(Task task) {
+        return executeTaskSync(task, new ExecuteOption(), null);
+    }
+
+    public String executeTaskSync(Task task, ExecuteOption option, ConnectContext context) {
         TaskRun taskRun;
         SubmitResult submitResult;
         if (!tryTaskLock()) {
             throw new DmlException("Failed to get task lock when execute Task sync[" + task.getName() + "]");
         }
         try {
-            taskRun = TaskRunBuilder.newBuilder(task).build();
+            taskRun = TaskRunBuilder.newBuilder(task).setConnectContext(context).build();
             submitResult = taskRunManager.submitTaskRun(taskRun, option);
             if (submitResult.getStatus() != SUBMITTED) {
                 throw new DmlException("execute task:" + task.getName() + " failed");
@@ -312,7 +316,10 @@ public class TaskManager {
             taskUnlock();
         }
         try {
-            taskRun.getFuture().get();
+            Constants.TaskRunState taskRunState = taskRun.getFuture().get();
+            if (taskRunState != Constants.TaskRunState.SUCCESS) {
+                throw new DmlException("execute task: %s failed. task run state:%s", task.getName(), taskRunState);
+            }
             return submitResult.getQueryId();
         } catch (Exception e) {
             throw new DmlException("execute task: %s failed.", e, task.getName());

@@ -313,7 +313,7 @@ public class DDLStmtExecutor {
                         TaskBuilder.updateTaskInfo(task, mv);
                         taskManager.createTask(task, false);
                     }
-                    String taskRunId = taskManager.executeTaskSync(task);
+                    String taskRunId = taskManager.executeTaskSync(task, context);
                     info.add(taskRunId);
                 } else {
                     // The priority of manual refresh is higher than that of general refresh

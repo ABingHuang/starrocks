@@ -15,6 +15,8 @@
 
 package com.starrocks.scheduler;
 
+import com.starrocks.qe.ConnectContext;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -22,6 +24,7 @@ public class TaskRunBuilder {
     private final Task task;
     private Map<String, String> properties;
     private Constants.TaskType type;
+    private ConnectContext connectContext;
 
     public static TaskRunBuilder newBuilder(Task task) {
         return new TaskRunBuilder(task);
@@ -31,9 +34,15 @@ public class TaskRunBuilder {
         this.task = task;
     }
 
+    public TaskRunBuilder setConnectContext(ConnectContext connectContext) {
+        this.connectContext = connectContext;
+        return this;
+    }
+
     // TaskRun is the smallest unit of execution.
     public TaskRun build() {
         TaskRun taskRun = new TaskRun();
+        taskRun.setConnectContext(connectContext);
         taskRun.setTaskId(task.getId());
         taskRun.setProperties(mergeProperties());
         taskRun.setTask(task);
