@@ -64,6 +64,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.JoinPredicatePushdown;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.MvNormalizePredicateRule;
+import com.starrocks.sql.optimizer.rule.mv.IDirectedGraph;
+import com.starrocks.sql.optimizer.rule.mv.JoinEdge;
+import com.starrocks.sql.optimizer.rule.mv.ListDirectedGraph;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -162,6 +165,29 @@ public class MaterializedViewRewriter {
             return false;
         }
         return true;
+    }
+
+    // maybe this is not necessary
+    private ListDirectedGraph buildJoinGraph(OptExpression expression) {
+        List<TableScanDesc> tableScanDescs = MvUtils.getTableScanDescs(expression);
+        ListDirectedGraph<TableScanDesc, JoinEdge> joinGraph = ListDirectedGraph.create(JoinEdge::new);
+        // add vertexes
+        for (TableScanDesc tableScanDesc : tableScanDescs) {
+            joinGraph.addVertex(tableScanDesc);
+        }
+
+        // add edge
+        // analyze join from join onPredicate
+        Map<LogicalScanOperator, TableScanDesc> scanDescMap = Maps.newHashMap();
+        for (TableScanDesc tableScanDesc : tableScanDescs) {
+            scanDescMap.put(tableScanDesc.getScanOperator(), tableScanDesc);
+        }
+        for (TableScanDesc tableScanDesc : tableScanDescs) {
+            ScalarOperator onPredicate = tableScanDesc.getOnPredicate();
+            ColumnRefSet usedColumns = onPredicate.getUsedColumns();
+        }
+
+        return joinGraph;
     }
 
     private boolean isSupportViewDeltaJoin(Table table) {

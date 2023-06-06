@@ -167,7 +167,7 @@ public class MvUtils {
                 LogicalScanOperator scanOperator = (LogicalScanOperator) optExpression.getOp();
                 Table table = scanOperator.getTable();
                 Integer id = scanContext.getTableIdMap().computeIfAbsent(table, t -> 0);
-                TableScanDesc tableScanDesc = new TableScanDesc(table, id, scanOperator, null, false);
+                TableScanDesc tableScanDesc = new TableScanDesc(table, id, scanOperator, null, false, null);
                 context.getTableScanDescs().add(tableScanDesc);
                 scanContext.getTableIdMap().put(table, ++id);
                 return null;
@@ -182,8 +182,8 @@ public class MvUtils {
                         Table table = scanOperator.getTable();
                         Integer id = scanContext.getTableIdMap().computeIfAbsent(table, t -> 0);
                         LogicalJoinOperator joinOperator = optExpression.getOp().cast();
-                        TableScanDesc tableScanDesc =
-                                new TableScanDesc(table, id, scanOperator, joinOperator.getJoinType(), i == 0);
+                        TableScanDesc tableScanDesc = new TableScanDesc(
+                                table, id, scanOperator, joinOperator.getJoinType(), i == 0, joinOperator.getOnPredicate());
                         context.getTableScanDescs().add(tableScanDesc);
                         scanContext.getTableIdMap().put(table, ++id);
                     } else {
