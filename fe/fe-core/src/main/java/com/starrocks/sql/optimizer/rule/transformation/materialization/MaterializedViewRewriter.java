@@ -19,6 +19,7 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -50,8 +51,10 @@ import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -65,6 +68,7 @@ import com.starrocks.sql.optimizer.rewrite.JoinPredicatePushdown;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.MvNormalizePredicateRule;
 import com.starrocks.sql.optimizer.rule.mv.IDirectedGraph;
+import com.starrocks.sql.optimizer.rule.mv.JoinDeriveContext;
 import com.starrocks.sql.optimizer.rule.mv.JoinEdge;
 import com.starrocks.sql.optimizer.rule.mv.ListDirectedGraph;
 import org.apache.logging.log4j.LogManager;
@@ -91,6 +95,15 @@ public class MaterializedViewRewriter {
     protected static final Logger LOG = LogManager.getLogger(MaterializedViewRewriter.class);
     protected final MvRewriteContext mvRewriteContext;
     protected final MaterializationContext materializationContext;
+
+    private static final Map<JoinOperator, List<JoinOperator>> joinCompatibleMap =
+            ImmutableMap.<JoinOperator, List<JoinOperator>>builder()
+            .put(JoinOperator.INNER_JOIN, Lists.newArrayList(JoinOperator.LEFT_SEMI_JOIN, JoinOperator.RIGHT_SEMI_JOIN))
+            .put(JoinOperator.LEFT_OUTER_JOIN, Lists.newArrayList(JoinOperator.INNER_JOIN, JoinOperator.LEFT_ANTI_JOIN))
+            .put(JoinOperator.RIGHT_OUTER_JOIN, Lists.newArrayList(JoinOperator.INNER_JOIN, JoinOperator.RIGHT_ANTI_JOIN))
+            .put(JoinOperator.FULL_OUTER_JOIN, Lists.newArrayList(JoinOperator.INNER_JOIN,
+                    JoinOperator.LEFT_OUTER_JOIN, JoinOperator.RIGHT_OUTER_JOIN))
+            .build();
 
     protected enum MatchMode {
         // all tables and join types match
@@ -188,6 +201,202 @@ public class MaterializedViewRewriter {
         }
 
         return joinGraph;
+    }
+
+    // Post-order traversal
+    boolean computeCompatibility(OptExpression queryExpr, OptExpression mvExpr) {
+        LogicalOperator queryOp = (LogicalOperator) queryExpr.getOp();
+        LogicalOperator mvOp = (LogicalOperator) mvExpr.getOp();
+        if (!queryOp.getClass().equals(mvOp.getClass())) {
+            return false;
+        }
+        if (queryOp instanceof LogicalJoinOperator) {
+            boolean leftCompatability = computeCompatibility(queryExpr.inputAt(0), mvExpr.inputAt(0));
+            boolean rightCompatability = computeCompatibility(queryExpr.inputAt(1), mvExpr.inputAt(1));
+            if (!leftCompatability || !rightCompatability) {
+                return false;
+            }
+            // compute join compatiblity
+            LogicalJoinOperator queryJoin = (LogicalJoinOperator) queryExpr.getOp();
+            JoinOperator queryJoinType = queryJoin.getJoinType();
+
+            LogicalJoinOperator mvJoin = (LogicalJoinOperator) mvExpr.getOp();
+            JoinOperator mvJoinType = mvJoin.getJoinType();
+            if (queryJoin.equals(mvJoin)) {
+                return true;
+            }
+
+            if (!queryJoin.getOnPredicate().equals(mvJoin.getOnPredicate())) {
+                return false;
+            }
+            if (!joinCompatibleMap.get(queryJoinType).contains(mvJoinType)) {
+                return false;
+            }
+
+            // only support table column equality predicates like A.c1 = B.c1 && A.c2 = B.c2
+            // should know the right table
+            ScalarOperator mvOnPredicate = mvJoin.getOnPredicate();
+            // relationId -> join on predicate used columns
+            Map<Integer, ColumnRefSet> joinColumns = Maps.newHashMap();
+            boolean isSupported =
+                    isSupportedPredicate(mvOnPredicate, materializationContext.getMvColumnRefFactory(), joinColumns);
+            if (!isSupported) {
+                return false;
+            }
+            boolean isCompatible = true;
+            Map<ColumnRefSet, Table> usedColumnsToTable = Maps.newHashMap();
+            for (Map.Entry<Integer, ColumnRefSet> entry : joinColumns.entrySet()) {
+                Table table = materializationContext.getMvColumnRefFactory().getTableForColumn(entry.getValue().getFirstId());
+                usedColumnsToTable.put(entry.getValue(), table);
+            }
+            ColumnRefSet leftColumns = mvExpr.inputAt(0).getOutputColumns();
+            ColumnRefSet rightColumns = mvExpr.inputAt(1).getOutputColumns();
+            List<ColumnRefOperator> joinColumnRefs = null;
+            if (queryJoinType.isInnerJoin() && mvJoinType.isLeftSemiJoin()) {
+                // rewrite left semi join to inner join
+                // check join keys of the right table are unique keys or primary keys
+                Optional<ColumnRefSet> rightColumnRefSet = usedColumnsToTable.keySet()
+                        .stream().filter(columnSet -> rightColumns.containsAll(columnSet)).findFirst();
+                if (!rightColumnRefSet.isPresent()) {
+                    return false;
+                }
+                Table rightTable = usedColumnsToTable.get(rightColumnRefSet.get());
+                joinColumnRefs =
+                        rightColumnRefSet.get().getColumnRefOperators(materializationContext.getMvColumnRefFactory());
+                List<String> columnNames =
+                        joinColumnRefs.stream().map(columnRef -> columnRef.getName()).collect(Collectors.toList());
+                Preconditions.checkNotNull(rightTable);
+                isCompatible = isUniqueColumns(rightTable, columnNames);
+            } else if (queryJoinType.isInnerJoin() && mvJoinType.isLeftSemiJoin()) {
+                // rewrite right semi join to inner join
+                // check join keys of the left table are unique keys or primary keys
+                Optional<ColumnRefSet> leftColumnRefSet = usedColumnsToTable.keySet()
+                        .stream().filter(columnSet -> leftColumns.containsAll(columnSet)).findFirst();
+                if (!leftColumnRefSet.isPresent()) {
+                    return false;
+                }
+                Table leftTable = usedColumnsToTable.get(leftColumnRefSet.get());
+                joinColumnRefs =
+                        leftColumnRefSet.get().getColumnRefOperators(materializationContext.getMvColumnRefFactory());
+                List<String> columnNames =
+                        joinColumnRefs.stream().map(columnRef -> columnRef.getName()).collect(Collectors.toList());
+                Preconditions.checkNotNull(leftTable);
+                isCompatible = isUniqueColumns(leftTable, columnNames);
+            } else if (queryJoinType.isLeftOuterJoin() && (mvJoinType.isInnerJoin() || mvJoinType.isLeftAntiJoin())) {
+                Optional<ColumnRefSet> rightColumnRefSet = usedColumnsToTable.keySet()
+                        .stream().filter(columnSet -> rightColumns.containsAll(columnSet)).findFirst();
+                if (!rightColumnRefSet.isPresent()) {
+                    return false;
+                }
+                joinColumnRefs =
+                        rightColumnRefSet.get().getColumnRefOperators(materializationContext.getMvColumnRefFactory());
+            } else if (queryJoinType.isRightOuterJoin() && (mvJoinType.isInnerJoin() || mvJoinType.isRightAntiJoin())) {
+                Optional<ColumnRefSet> leftColumnRefSet = usedColumnsToTable.keySet()
+                        .stream().filter(columnSet -> leftColumns.containsAll(columnSet)).findFirst();
+                if (!leftColumnRefSet.isPresent()) {
+                    return false;
+                }
+                joinColumnRefs =
+                        leftColumnRefSet.get().getColumnRefOperators(materializationContext.getMvColumnRefFactory());
+            } else if (queryJoinType.isFullOuterJoin() && mvJoinType.isLeftOuterJoin()) {
+                Optional<ColumnRefSet> leftColumnRefSet = usedColumnsToTable.keySet()
+                        .stream().filter(columnSet -> leftColumns.containsAll(columnSet)).findFirst();
+                if (!leftColumnRefSet.isPresent()) {
+                    return false;
+                }
+                joinColumnRefs =
+                        leftColumnRefSet.get().getColumnRefOperators(materializationContext.getMvColumnRefFactory());
+            } else if (queryJoinType.isFullOuterJoin() && mvJoinType.isRightOuterJoin()) {
+                Optional<ColumnRefSet> rightColumnRefSet = usedColumnsToTable.keySet()
+                        .stream().filter(columnSet -> rightColumns.containsAll(columnSet)).findFirst();
+                if (!rightColumnRefSet.isPresent()) {
+                    return false;
+                }
+                joinColumnRefs =
+                        rightColumnRefSet.get().getColumnRefOperators(materializationContext.getMvColumnRefFactory());
+            } else if (queryJoinType.isFullOuterJoin() && mvJoinType.isInnerJoin()) {
+                ColumnRefSet columnRefSet = new ColumnRefSet();
+                usedColumnsToTable.keySet().stream().forEach(usedColumns -> columnRefSet.union(usedColumns));
+                // maybe we should split left and right
+                // because we may add both side predicate for each
+                joinColumnRefs = columnRefSet.getColumnRefOperators(materializationContext.getMvColumnRefFactory());
+            }
+            if (!isCompatible) {
+                return false;
+            }
+            JoinDeriveContext joinDeriveContext = new JoinDeriveContext(queryJoinType, mvJoinType, joinColumnRefs);
+            mvRewriteContext.addJoinDeriveContext(joinDeriveContext);
+            return true;
+        } else if (queryOp instanceof LogicalScanOperator) {
+            Preconditions.checkState(mvOp instanceof LogicalScanOperator);
+            Table queryTable = ((LogicalScanOperator) queryOp).getTable();
+            Table mvTable = ((LogicalScanOperator) mvOp).getTable();
+            return mvTable.equals(queryTable);
+        } else if (queryOp instanceof LogicalAggregationOperator) {
+            // consider aggregation
+            return computeCompatibility(queryExpr.inputAt(0), mvExpr.inputAt(0));
+        } else {
+            throw new UnsupportedOperationException("unsupported operator:" + queryOp.getClass());
+        }
+    }
+
+    private boolean isUniqueColumns(Table table, List<String> columnNames) {
+        if (table.isOlapTable()) {
+            OlapTable olapTable = (OlapTable) table;
+            if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS || olapTable.getKeysType() == KeysType.UNIQUE_KEYS) {
+                List<String> keyColumnNames =
+                        olapTable.getKeyColumns().stream().map(column -> column.getName()).collect(Collectors.toList());
+                return columnNames.containsAll(keyColumnNames);
+            }
+        }
+        return table.hasUniqueConstraints() && table.getUniqueConstraints().stream().anyMatch(
+                uniqueConstraint -> columnNames.containsAll(uniqueConstraint.getUniqueColumns()));
+    }
+
+    private boolean isSupportedPredicate(
+            ScalarOperator onPredicate, ColumnRefFactory columnRefFactory, Map<Integer, ColumnRefSet> joinColumns) {
+        ScalarOperatorVisitor<Boolean, Void> checker = new ScalarOperatorVisitor<Boolean, Void>() {
+            @Override
+            public Boolean visit(ScalarOperator scalarOperator, Void context) {
+                return false;
+            }
+
+            public Boolean visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
+                for (ScalarOperator child : predicate.getChildren()) {
+                    Boolean ret = child.accept(this, null);
+                    if (!ret) {
+                        return ret;
+                    }
+                }
+                return true;
+            }
+
+            public Boolean visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
+                if (!predicate.getBinaryType().isEqual()) {
+                    return Boolean.FALSE;
+                }
+                return new Boolean(predicate.getChild(0).isColumnRef() && predicate.getChild(1).isColumnRef());
+            }
+        };
+        Boolean ret = onPredicate.accept(checker, null);
+        if (!ret.booleanValue()) {
+            return false;
+        }
+        ColumnRefSet usedColumns = onPredicate.getUsedColumns();
+        for (int columnId : usedColumns.getColumnIds()) {
+            int relationId = columnRefFactory.getRelationId(columnId);
+            if (relationId == -1) {
+                // not use the column from table scan, unsupported
+                return false;
+            }
+            ColumnRefSet refColumns = joinColumns.computeIfAbsent(relationId, k -> new ColumnRefSet());
+            refColumns.union(columnId);
+        }
+        if (joinColumns.size() != 2) {
+            // join predicate refs more than two tables, unsupported
+            return false;
+        }
+        return true;
     }
 
     private boolean isSupportViewDeltaJoin(Table table) {
