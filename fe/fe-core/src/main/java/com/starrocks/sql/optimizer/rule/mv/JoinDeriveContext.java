@@ -8,12 +8,13 @@ import java.util.List;
 public class JoinDeriveContext {
     private JoinOperator queryJoinType;
     private JoinOperator mvJoinType;
-    private List<ColumnRefOperator> joinColumns;
+    // join columns for left and right join tables
+    private List<List<ColumnRefOperator>> joinColumns;
 
     public JoinDeriveContext(
             JoinOperator queryJoinType,
             JoinOperator mvJoinType,
-            List<ColumnRefOperator> joinColumns) {
+            List<List<ColumnRefOperator>> joinColumns) {
         this.queryJoinType = queryJoinType;
         this.mvJoinType = mvJoinType;
         this.joinColumns = joinColumns;
@@ -27,7 +28,11 @@ public class JoinDeriveContext {
         return mvJoinType;
     }
 
-    public List<ColumnRefOperator> getJoinColumns() {
-        return joinColumns;
+    public List<ColumnRefOperator> getLeftJoinColumns() {
+        return joinColumns.get(0);
+    }
+
+    public List<ColumnRefOperator> getRightJoinColumns() {
+        return joinColumns.get(1);
     }
 }
