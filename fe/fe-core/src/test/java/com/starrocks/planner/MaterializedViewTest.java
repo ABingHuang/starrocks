@@ -411,20 +411,20 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select count(*) from " +
                 "emps  right join locations on emps.locationid = locations.locationid");
         // TODO: Query's right outer join will be converted to Inner Join.
-        testRewriteFail(mv, "select empid as col2, emps.locationid from " +
+        testRewriteOK(mv, "select empid as col2, emps.locationid from " +
                 "emps  right join locations on emps.locationid = locations.locationid " +
                 "where emps.deptno > 10");
         // TODO: Query's right outer join will be converted to Inner Join.
-        testRewriteFail(mv, "select count(*) from " +
+        testRewriteOK(mv, "select count(*) from " +
                 "emps  right join locations on emps.locationid = locations.locationid " +
                 "where emps.deptno > 10");
         testRewriteOK(mv, "select empid as col2, locations.locationid from " +
                 "emps  right join locations on emps.locationid = locations.locationid " +
                 "where locations.locationid > 10");
-        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+        testRewriteOK(mv, "select empid as col2, locations.locationid from " +
                 "emps inner join locations on emps.locationid = locations.locationid " +
                 "and locations.locationid > 10");
-        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+        testRewriteOK(mv, "select empid as col2, locations.locationid from " +
                 "emps inner join locations on emps.locationid = locations.locationid " +
                 "and emps.locationid > 10");
     }
@@ -2661,70 +2661,64 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    public void testLeftOuterJoin() throws Exception {
+    public void testJoinDeriveRewrite() {
         {
-            String table1 = "CREATE TABLE `dsrc__test_listing__c822e115f7205ed1502772f3d9ce1574` (\n" +
-                    "  `listing` varchar(65533) NULL COMMENT \"Minerva Subject\",\n" +
-                    "  `test_source_dim_room_type` varchar(65533) NULL COMMENT \"Test dimension - please do not use this\",\n" +
-                    "  `test_source_dim_is_select` varchar(65533) NULL COMMENT \"Test dimension - please do not use this\",\n" +
-                    "  `ts_start` datetime NULL COMMENT \"Minerva SCD Start TS\",\n" +
-                    "  `ts_end` datetime NULL COMMENT \"Minerva SCD End TS\",\n" +
-                    "  `ds` date NULL COMMENT \"Minerva Date Stamp\"\n" +
-                    ") ENGINE=OLAP\n" +
-                    "DUPLICATE KEY(`listing`)\n" +
-                    "COMMENT \"Minerva Airbnb Dimension Source: test_listing\"\n" +
-                    "PARTITION BY RANGE(`ds`)\n" +
-                    "(PARTITION p20160131 VALUES [(\"0000-01-01\"), (\"2016-01-31\")),\n" +
-                    "PARTITION p20160301 VALUES [(\"2016-01-31\"), (\"2016-03-01\")),\n" +
-                    "PARTITION p20230623 VALUES [(\"2023-05-24\"), (\"2023-06-23\")))\n" +
-                    "DISTRIBUTED BY HASH(`listing`, `ts_start`) BUCKETS 10\n" +
-                    "PROPERTIES (\n" +
-                    "\"replication_num\" = \"1\",\n" +
-                    "\"in_memory\" = \"false\",\n" +
-                    "\"storage_format\" = \"DEFAULT\",\n" +
-                    "\"enable_persistent_index\" = \"false\",\n" +
-                    "\"compression\" = \"LZ4\"\n" +
-                    ");";
-            starRocksAssert.withTable(table1);
-
-            String table2 = "CREATE TABLE `esrc__test_source_small__acfcca267780df52b70009c2dd8c4948` (\n" +
-                    "  `guest` varchar(65533) NULL COMMENT \"Minerva Subject\",\n" +
-                    "  `listing` varchar(65533) NULL COMMENT \"Minerva Subject\",\n" +
-                    "  `ds` date NULL COMMENT \"Minerva Date Stamp\",\n" +
-                    "  `ts` datetime NULL COMMENT \"Minerva Time Stamp\",\n" +
-                    "  `test_source_dim_available_lux` varchar(65533) NULL COMMENT \"Test dimension - please do not use this\",\n" +
-                    "  `test_source_dim_currency_lux` varchar(65533) NULL COMMENT \"Test dimension - please do not use this\",\n" +
-                    "  `test_source_dim_guests` varchar(65533) NULL COMMENT \"Test dimension - please do not use this\",\n" +
-                    "  `test_source_guests` double NULL COMMENT \"Minerva Measure\",\n" +
-                    "  `test_source_guest_satisfaction_lux` double NULL COMMENT \"Minerva Measure\",\n" +
-                    "  `test_source_dated_pdp_views_lux` double NULL COMMENT \"Minerva Measure\"\n" +
-                    ") ENGINE=OLAP\n" +
-                    "DUPLICATE KEY(`guest`, `listing`)\n" +
-                    "COMMENT \"Minerva Airbnb Measure Source: test_source_small\"\n" +
-                    "PARTITION BY RANGE(`ds`)\n" +
-                    "(PARTITION p20220427 VALUES [(\"2022-03-28\"), (\"2022-04-27\")),\n" +
-                    "PARTITION p20220527 VALUES [(\"2022-04-27\"), (\"2022-05-27\")),\n" +
-                    "PARTITION p20230621 VALUES [(\"2023-05-22\"), (\"2023-06-21\")))\n" +
-                    "DISTRIBUTED BY HASH(`guest`) BUCKETS 18\n" +
-                    "PROPERTIES (\n" +
-                    "\"replication_num\" = \"1\",\n" +
-                    "\"colocate_with\" = \"guest_v5\",\n" +
-                    "\"in_memory\" = \"false\",\n" +
-                    "\"storage_format\" = \"DEFAULT\",\n" +
-                    "\"enable_persistent_index\" = \"false\",\n" +
-                    "\"compression\" = \"LZ4\"\n" +
-                    ");";
-            starRocksAssert.withTable(table2);
-
-            String mv = "SELECT `test_source_small`.`listing`, `test_source_small`.`ds`, `test_source_small`.`test_source_guests`, `test_listing`.`test_source_dim_room_type`, `test_listing`.`ds` AS `listing_ds`\n" +
-                    "FROM `esrc__test_source_small__acfcca267780df52b70009c2dd8c4948` AS `test_source_small` LEFT OUTER JOIN (SELECT `test_listing`.`listing`, `test_listing`.`test_source_dim_room_type`, `test_listing`.`test_source_dim_is_select`, `test_listing`.`ts_start`, `test_listing`.`ts_end`, `test_listing`.`ds`\n" +
-                    "FROM `dsrc__test_listing__c822e115f7205ed1502772f3d9ce1574` AS `test_listing`) test_listing ON (`test_source_small`.`listing` = `test_listing`.`listing`) AND (`test_source_small`.`ts` BETWEEN `test_listing`.`ts_start` AND `test_listing`.`ts_end`);";
-
-            String query = "SELECT  `test_source_small`.`listing`        ,`test_source_small`.`ds`        ,`test_source_small`.`test_source_guests`        ,`test_listing`.`test_source_dim_room_type`        ,`test_listing`.`ds` as `listing_ds` FROM `esrc__test_source_small__acfcca267780df52b70009c2dd8c4948` AS `test_source_small` LEFT OUTER JOIN\n" +
-                    "( SELECT  `test_listing`.`listing`        ,`test_listing`.`test_source_dim_room_type`        ,`test_listing`.`test_source_dim_is_select`        ,`test_listing`.`ts_start`\n" +
-                    "  ,`test_listing`.`ts_end`        ,`test_listing`.`ds` FROM `dsrc__test_listing__c822e115f7205ed1502772f3d9ce1574` AS `test_listing` ) test_listing ON (`test_source_small`.`listing` = `test_listing`.`listing`) AND (`test_source_small`.`ts` BETWEEN `test_listing`.`ts_start` AND `test_listing`.`ts_end`) where test_listing.ds = '2023-01-01';";
+            // the compensation predicate is c_custkey is not null, c_custkey should be in the output of mv
+            // Equivalence class should not be used. because c_custkey is nullable in mv, but lo_custkey is
+            // not nullable
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
+                    " from lineorder left outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
+                    " from lineorder left outer join customer" +
+                    " on lo_custkey = c_custkey where c_name = 'name'";
             testRewriteOK(mv, query);
+        }
 
+        {
+            // the compensation predicate is c_custkey is not null, c_custkey should be in the output of mv
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder left outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder left outer join customer" +
+                    " on lo_custkey = c_custkey where c_name = 'name'";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 31: c_name = 'name'\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            // the compensation predicate is c_custkey is not null, c_custkey should be in the output of mv
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder left outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder left outer join customer" +
+                    " on lo_custkey = c_custkey where c_custkey = 1";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 30: c_custkey = 1\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            // the compensation predicate is c_custkey is not null, c_custkey should be in the output of mv
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder left outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder inner join customer" +
+                    " on lo_custkey = c_custkey";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            // should contain c_custkey IS NOT NULL predicate
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 30: c_custkey IS NOT NULL\n" +
+                    "     partitions=1/1");
         }
     }
 }

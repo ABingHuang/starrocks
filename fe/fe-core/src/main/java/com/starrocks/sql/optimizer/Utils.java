@@ -449,6 +449,15 @@ public class Utils {
         return false;
     }
 
+    public static boolean isColumnEqualBinaryPredicate(ScalarOperator predicate) {
+        if (predicate instanceof BinaryPredicateOperator) {
+            BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) predicate;
+            return binaryPredicate.getBinaryType().isEquivalence()
+                    && binaryPredicate.getChild(0).isColumnRef() && binaryPredicate.getChild(1).isColumnRef();
+        }
+        return false;
+    }
+
     /**
      * Try cast op to descType, return empty if failed
      */

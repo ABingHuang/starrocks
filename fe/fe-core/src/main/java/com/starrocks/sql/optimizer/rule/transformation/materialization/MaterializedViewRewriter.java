@@ -373,33 +373,14 @@ public class MaterializedViewRewriter {
 
     private boolean isSupportedPredicate(
             ScalarOperator onPredicate, ColumnRefFactory columnRefFactory, Map<Integer, ColumnRefSet> joinColumns) {
-        ScalarOperatorVisitor<Boolean, Void> checker = new ScalarOperatorVisitor<Boolean, Void>() {
-            @Override
-            public Boolean visit(ScalarOperator scalarOperator, Void context) {
-                return false;
-            }
-
-            // TODO: consider or and not, only and is valid?
-            public Boolean visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
-                boolean ret = false;
-                for (ScalarOperator child : predicate.getChildren()) {
-                    ret = ret || child.accept(this, null);
-                }
-                return ret;
-            }
-
-            public Boolean visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
-                if (!predicate.getBinaryType().isEqual()) {
-                    return Boolean.FALSE;
-                }
-                return new Boolean(predicate.getChild(0).isColumnRef() && predicate.getChild(1).isColumnRef());
-            }
-        };
-        Boolean ret = onPredicate.accept(checker, null);
-        if (!ret.booleanValue()) {
+        List<ScalarOperator> conjuncts = Utils.extractConjuncts(onPredicate);
+        List<ScalarOperator> binaryPredicates = conjuncts.stream()
+                .filter(conjunct -> Utils.isColumnEqualBinaryPredicate(conjunct)).collect(Collectors.toList());
+        if (binaryPredicates.isEmpty()) {
             return false;
         }
-        ColumnRefSet usedColumns = onPredicate.getUsedColumns();
+
+        ColumnRefSet usedColumns = Utils.compoundAnd(binaryPredicates).getUsedColumns();
         for (int columnId : usedColumns.getColumnIds()) {
             int relationId = columnRefFactory.getRelationId(columnId);
             if (relationId == -1) {
@@ -1213,21 +1194,51 @@ public class MaterializedViewRewriter {
             Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp,
             List<ColumnRefOperator> joinColumns,
             List<ScalarOperator> compensationPredicates, boolean isNotNull) {
+        Integer relationId = materializationContext.getQueryRefFactory().getRelationId(joinColumns.get(0).getId());
+        List<ColumnRefOperator> relationColumns = Lists.newArrayList();
+        Map<Integer, Integer> columnToRelationId = materializationContext.getQueryRefFactory().getColumnToRelationIds();
+        for (Map.Entry<Integer, Integer> entry : columnToRelationId.entrySet()) {
+            if (entry.getValue() == relationId) {
+                relationColumns.add(materializationContext.getQueryRefFactory().getColumnRef(entry.getKey()));
+            }
+        }
+        List<ColumnRefOperator> compensatedTableColumnsInMv = Lists.newArrayList();
+        for (ColumnRefOperator relationColumnRef : relationColumns) {
+            ScalarOperator rewrittenColumnRef = rewriteMVCompensationExpression(rewriteContext, rewriter,
+                    mvColumnRefToScalarOp, relationColumnRef, false, false);
+            if (rewrittenColumnRef != null) {
+                compensatedTableColumnsInMv.add((ColumnRefOperator) rewrittenColumnRef);
+            }
+        }
+        if (compensatedTableColumnsInMv.isEmpty()) {
+            // there is no output of compensation table
+            return Optional.empty();
+        }
+
         List<ScalarOperator> relatedPredicates = compensationPredicates.stream().filter(
-                predicate -> predicate.getUsedColumns().containsAny(joinColumns)).collect(Collectors.toList());
-        if (relatedPredicates.stream().allMatch(
-                relatedPredicate -> !Utils.canEliminateNull(Sets.newHashSet(joinColumns), relatedPredicate))) {
-            for (ColumnRefOperator joinColumn : joinColumns) {
+                predicate -> predicate.getUsedColumns().containsAny(compensatedTableColumnsInMv)).collect(Collectors.toList());
+        if (relatedPredicates.isEmpty() || relatedPredicates.stream().allMatch(
+                relatedPredicate -> !Utils.canEliminateNull(Sets.newHashSet(compensatedTableColumnsInMv), relatedPredicate))) {
+            // use any column to construct a not null predicate
+            IsNullPredicateOperator columnIsNotNull = new IsNullPredicateOperator(isNotNull, compensatedTableColumnsInMv.get(0));
+            return Optional.of(columnIsNotNull);
+            /*
+            for (ColumnRefOperator tableColumnRef : compensatedTableColumnsInMv) {
                 // add is not null predicate to compensation predicates
-                IsNullPredicateOperator columnIsNotNull = new IsNullPredicateOperator(isNotNull, joinColumn);
+                IsNullPredicateOperator columnIsNotNull = new IsNullPredicateOperator(isNotNull, tableColumnRef);
+                // do not use ec here
+                // because after mapping ec, the column's nullable property may be wrong.
                 ScalarOperator rewrittenPredicate = rewriteMVCompensationExpression(rewriteContext, rewriter,
-                        mvColumnRefToScalarOp, columnIsNotNull, false);
+                        mvColumnRefToScalarOp, columnIsNotNull, false, false);
                 if (rewrittenPredicate != null) {
                     return Optional.of(rewrittenPredicate);
                 }
             }
             return Optional.empty();
+
+             */
         }
+        // there is null-rejecting predicate for compensated table, do not add any more predicate
         return Optional.of(ConstantOperator.TRUE);
     }
 
@@ -1236,18 +1247,26 @@ public class MaterializedViewRewriter {
                                                            Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp,
                                                            ScalarOperator predicate,
                                                            boolean isMVBased) {
+        return rewriteMVCompensationExpression(rewriteContext, rewriter, mvColumnRefToScalarOp, predicate, isMVBased, true);
+    }
+
+    private ScalarOperator rewriteMVCompensationExpression(RewriteContext rewriteContext,
+                                                           ColumnRewriter rewriter,
+                                                           Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp,
+                                                           ScalarOperator predicate,
+                                                           boolean isMVBased, boolean useEc) {
         List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
         // swapped by query based view ec
-        List<ScalarOperator> rewrittenConjuncts = conjuncts.stream()
+        List<ScalarOperator> rewrittenConjuncts = useEc ? conjuncts.stream()
                 .map(conjunct ->  rewriter.rewriteByEc(conjunct, isMVBased))
                 .distinct() // equal-class scalar operators may generate the same rewritten conjunct.
-                .collect(Collectors.toList());
+                .collect(Collectors.toList()) : conjuncts;
         if (rewrittenConjuncts.isEmpty()) {
             return null;
         }
 
         EquationRewriter queryExprToMvExprRewriter =
-                buildEquationRewriter(mvColumnRefToScalarOp, rewriteContext, isMVBased);
+                buildEquationRewriter(mvColumnRefToScalarOp, rewriteContext, isMVBased, true, useEc);
         List<ScalarOperator> candidates = rewriteScalarOpToTarget(rewrittenConjuncts, queryExprToMvExprRewriter,
                 rewriteContext.getOutputMapping(), new ColumnRefSet(rewriteContext.getQueryColumnSet()));
         if (candidates == null || candidates.isEmpty()) {
@@ -1465,7 +1484,7 @@ public class MaterializedViewRewriter {
                 return queryCompensationPredicate;
             }
             ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
-            partitionColumnRef = columnRewriter.rewriteViewToQuery(partitionColumnRef).cast();
+            partitionColumnRef = columnRewriter.rewriteColumnViewToQuery(partitionColumnRef).cast();
             IsNullPredicateOperator isNullPredicateOperator = new IsNullPredicateOperator(partitionColumnRef);
             IsNullPredicateOperator isNotNullPredicateOperator = new IsNullPredicateOperator(true, partitionColumnRef);
             List<ScalarOperator> predicates = Utils.extractConjuncts(queryCompensationPredicate);
@@ -1593,21 +1612,28 @@ public class MaterializedViewRewriter {
 
     protected EquationRewriter buildEquationRewriter(
             Map<ColumnRefOperator, ScalarOperator> viewProjection, RewriteContext rewriteContext, boolean isViewBased) {
-        return buildEquationRewriter(viewProjection, rewriteContext, isViewBased, true);
+        return buildEquationRewriter(viewProjection, rewriteContext, isViewBased, true, true);
     }
 
     protected EquationRewriter buildEquationRewriter(
             Map<ColumnRefOperator, ScalarOperator> columnRefMap,
             RewriteContext rewriteContext,
             boolean isViewBased, boolean isQueryToMV) {
+        return buildEquationRewriter(columnRefMap, rewriteContext, isViewBased, isQueryToMV, true);
+    }
 
+    protected EquationRewriter buildEquationRewriter(
+            Map<ColumnRefOperator, ScalarOperator> columnRefMap,
+            RewriteContext rewriteContext,
+            boolean isViewBased, boolean isQueryToMV, boolean useEc) {
         EquationRewriter rewriter = new EquationRewriter();
         ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : columnRefMap.entrySet()) {
             ScalarOperator rewritten = rewriteContext.getMvColumnRefRewriter().rewrite(entry.getValue());
             ScalarOperator rewriteScalarOp;
             if (isQueryToMV) {
-                rewriteScalarOp = columnRewriter.rewriteToTargetWithEc(rewritten, isViewBased);
+                rewriteScalarOp = useEc ? columnRewriter.rewriteToTargetWithEc(rewritten, isViewBased)
+                        : columnRewriter.rewriteViewToQuery(rewritten);
                 // if rewriteScalarOp == rewritten and !rewritten.getUsedColumns().isEmpty(),
                 // it means the rewritten can not be mapped from mv to query.
                 // and ColumnRefOperator may conflict between mv and query(same id but not same name),
@@ -1652,8 +1678,8 @@ public class MaterializedViewRewriter {
             ColumnRefOperator left = (ColumnRefOperator) equalPredicate.getChild(0);
             Preconditions.checkState(equalPredicate.getChild(1).isColumnRef());
             ColumnRefOperator right = (ColumnRefOperator) equalPredicate.getChild(1);
-            ColumnRefOperator leftTarget = columnRewriter.rewriteViewToQuery(left);
-            ColumnRefOperator rightTarget = columnRewriter.rewriteViewToQuery(right);
+            ColumnRefOperator leftTarget = columnRewriter.rewriteColumnViewToQuery(left);
+            ColumnRefOperator rightTarget = columnRewriter.rewriteColumnViewToQuery(right);
             if (leftTarget == null || rightTarget == null) {
                 return null;
             }
@@ -1673,8 +1699,8 @@ public class MaterializedViewRewriter {
         for (final Map.Entry<ColumnRefOperator, ColumnRefOperator> entry : compensationJoinColumns.entries()) {
             final ColumnRefOperator left = entry.getKey();
             final ColumnRefOperator right = entry.getValue();
-            ColumnRefOperator newKey = columnRewriter.rewriteViewToQuery(left);
-            ColumnRefOperator newValue = columnRewriter.rewriteViewToQuery(right);
+            ColumnRefOperator newKey = columnRewriter.rewriteColumnViewToQuery(left);
+            ColumnRefOperator newValue = columnRewriter.rewriteColumnViewToQuery(right);
             if (newKey == null || newValue == null) {
                 return false;
             }
