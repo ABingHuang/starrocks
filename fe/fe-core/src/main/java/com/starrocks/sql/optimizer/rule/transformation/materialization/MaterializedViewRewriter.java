@@ -1129,6 +1129,9 @@ public class MaterializedViewRewriter {
         List<ScalarOperator> predicates = Utils.extractConjuncts(compensationPredicate);
         List<ScalarOperator> derivedPredicates = Lists.newArrayList();
         for (JoinDeriveContext joinDeriveContext : mvRewriteContext.getJoinDeriveContexts()) {
+            if (joinDeriveContext.getMvJoinType().isInnerJoin() && joinDeriveContext.getQueryJoinType().isSemiJoin()) {
+                continue;
+            }
             Optional<ScalarOperator> derivedPredicateOpt = null; 
             if (joinDeriveContext.getMvJoinType().isLeftOuterJoin() && joinDeriveContext.getQueryJoinType().isInnerJoin()) {
                 List<ColumnRefOperator> rightJoinColumns = joinDeriveContext.getRightJoinColumns();
