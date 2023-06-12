@@ -68,6 +68,26 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"in_memory\" = \"false\"\n" +
                 ")\n");
 
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer_null` (\n" +
+                "    `c_custkey` int(11) NULL COMMENT \"\",\n" +
+                "    `c_name` varchar(26) NULL COMMENT \"\",\n" +
+                "    `c_address` varchar(41) NULL COMMENT \"\",\n" +
+                "    `c_city` varchar(11) NULL COMMENT \"\",\n" +
+                "    `c_nation` varchar(16) NULL COMMENT \"\",\n" +
+                "    `c_region` varchar(13) NULL COMMENT \"\",\n" +
+                "    `c_phone` varchar(16) NULL COMMENT \"\",\n" +
+                "    `c_mktsegment` varchar(11) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c_custkey`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"colocate_with\" = \"groupa2\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"unique_constraints\" = \"c_custkey\"\n" +
+                ")\n");
+
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer` (\n" +
                 "    `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `c_name` varchar(26) NOT NULL COMMENT \"\",\n" +
@@ -3051,6 +3071,90 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             checker.contains("TABLE: mv0\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     partitions=1/1");
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder full outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder left outer join customer" +
+                    " on lo_custkey = c_custkey";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 26: lo_orderkey IS NOT NULL\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder_null full outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder_null left outer join customer" +
+                    " on lo_custkey = c_custkey";
+            // lo_custkey is nullable, can not be rewritten
+            testRewriteFail(mv, query);
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder full outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder right outer join customer" +
+                    " on lo_custkey = c_custkey";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 30: c_custkey IS NOT NULL\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder full outer join customer_null" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder right outer join customer_null" +
+                    " on lo_custkey = c_custkey";
+            testRewriteFail(mv, query);
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder full outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder inner join customer" +
+                    " on lo_custkey = c_custkey";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 30: c_custkey IS NOT NULL, 26: lo_orderkey IS NOT NULL\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder full outer join customer_null" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder inner join customer_null" +
+                    " on lo_custkey = c_custkey";
+            testRewriteFail(mv, query);
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder_null full outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder_null inner join customer" +
+                    " on lo_custkey = c_custkey";
+            // lo_custkey is nullable, can not be rewritten
+            testRewriteFail(mv, query);
         }
     }
 }

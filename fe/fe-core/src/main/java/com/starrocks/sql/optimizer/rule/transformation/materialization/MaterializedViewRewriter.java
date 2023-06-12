@@ -310,6 +310,11 @@ public class MaterializedViewRewriter {
                 }
                 List<ColumnRefOperator> leftJoinColumnRefs =
                         leftColumnRefSet.get().getColumnRefOperators(materializationContext.getQueryRefFactory());
+                leftJoinColumnRefs = leftJoinColumnRefs.stream()
+                        .filter(columnRefOperator -> !columnRefOperator.isNullable()).collect(Collectors.toList());
+                if (leftJoinColumnRefs.isEmpty()) {
+                    return false;
+                }
                 joinColumnRefs.set(0, leftJoinColumnRefs);
             } else if (mvJoinType.isFullOuterJoin() && queryJoinType.isRightOuterJoin()) {
                 Optional<ColumnRefSet> rightColumnRefSet = usedColumnsToTable.keySet()
@@ -319,6 +324,11 @@ public class MaterializedViewRewriter {
                 }
                 List<ColumnRefOperator> rightJoinColumnRefs =
                         rightColumnRefSet.get().getColumnRefOperators(materializationContext.getQueryRefFactory());
+                rightJoinColumnRefs = rightJoinColumnRefs.stream()
+                        .filter(columnRefOperator -> !columnRefOperator.isNullable()).collect(Collectors.toList());
+                if (rightJoinColumnRefs.isEmpty()) {
+                    return false;
+                }
                 joinColumnRefs.set(1, rightJoinColumnRefs);
             } else if (mvJoinType.isFullOuterJoin() && queryJoinType.isInnerJoin()) {
                 Optional<ColumnRefSet> leftColumnRefSet = usedColumnsToTable.keySet()
@@ -328,6 +338,11 @@ public class MaterializedViewRewriter {
                 }
                 List<ColumnRefOperator> leftJoinColumnRefs =
                         leftColumnRefSet.get().getColumnRefOperators(materializationContext.getQueryRefFactory());
+                leftJoinColumnRefs = leftJoinColumnRefs.stream()
+                        .filter(columnRefOperator -> !columnRefOperator.isNullable()).collect(Collectors.toList());
+                if (leftJoinColumnRefs.isEmpty()) {
+                    return false;
+                }
                 joinColumnRefs.set(0, leftJoinColumnRefs);
 
                 Optional<ColumnRefSet> rightColumnRefSet = usedColumnsToTable.keySet()
@@ -337,6 +352,11 @@ public class MaterializedViewRewriter {
                 }
                 List<ColumnRefOperator> rightJoinColumnRefs =
                         rightColumnRefSet.get().getColumnRefOperators(materializationContext.getQueryRefFactory());
+                rightJoinColumnRefs = rightJoinColumnRefs.stream()
+                        .filter(columnRefOperator -> !columnRefOperator.isNullable()).collect(Collectors.toList());
+                if (rightJoinColumnRefs.isEmpty()) {
+                    return false;
+                }
                 joinColumnRefs.set(1, rightJoinColumnRefs);
             }
             if (!isCompatible) {
