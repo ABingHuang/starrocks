@@ -1,4 +1,5 @@
--- name: test_mv_left_outer_rewrite
+
+
 CREATE TABLE IF NOT EXISTS `customer` (
   `c_custkey` int(11) NULL,
   `c_id` int(11) NULL,
@@ -187,7 +188,6 @@ drop materialized view mv_left_outer;
 drop materialized view mv_left_outer_2;
 drop materialized view mv_left_outer_agg;
 
--- name: test_mv_right_outer_rewrite
 create materialized view mv_right_outer
 distributed by hash(`lo_orderkey`) buckets 10
 refresh manual
@@ -240,10 +240,10 @@ order by lo_orderkey, lo_linenumber;
 -- result:
 10001	1	10	1	1	name_1
 10001	2	10	1	1	name_1
-10002	1	10	2	2	name_2
-10002	2	10	2	2	name_2
-10003	1	10	2	2	name_3
-10003	1	10	3	3	name_3
+10002	1	20	2	2	name_2
+10002	2	20	2	2	name_2
+10003	1	30	2	2	name_3
+10003	1	30	3	3	name_3
 -- !result
 
 explain select c_custkey, c_name
@@ -351,7 +351,6 @@ order by lo_orderkey;
 
 drop materialized view mv_right_outer_agg;
 
--- name: test_mv_inner_join_rewrite
 alter table customer set ("unique_constraints"="c_custkey");
 
 
@@ -592,9 +591,6 @@ order by lo_orderkey,lo_linenumber;
 10003	1	30
 
 drop materialized view mv_inner_join_6;
-
--- name: test_mv_full_outer_join_rewrite
-
 
 create materialized view mv_full_outer_join
 distributed by hash(`lo_orderkey`) buckets 10
