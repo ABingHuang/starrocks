@@ -3151,6 +3151,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "     partitions=1/1");
         }
 
+        // test full outer join
         {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder full outer join customer" +
