@@ -482,16 +482,83 @@ public class MvUtils {
     public static ScalarOperator getCompensationPredicateForDisjunctive(ScalarOperator src, ScalarOperator target) {
         List<ScalarOperator> srcItems = Utils.extractDisjunctive(src);
         List<ScalarOperator> targetItems = Utils.extractDisjunctive(target);
+        int result = getPredicateByEqual(srcItems, targetItems);
+        if (result == 1) {
+            return ConstantOperator.TRUE;
+        } else if (result == 2) {
+            return src;
+        } else {
+            // try to compute by range
+            if (srcItems.stream().allMatch(MvUtils::isRangePredicate)
+                    && targetItems.stream().allMatch(MvUtils::isRangePredicate)) {
+                result = getPredicateByRange(srcItems, targetItems);
+                if (result == 0) {
+                    return null;
+                }
+                return src;
+            } else {
+                return null;
+            }
+        }
+    }
+
+    public static boolean isRangePredicate(ScalarOperator scalarOperator) {
+        if (scalarOperator instanceof BinaryPredicateOperator) {
+            BinaryPredicateOperator binary = (BinaryPredicateOperator) scalarOperator;
+            ScalarOperator leftChild = scalarOperator.getChild(0);
+            ScalarOperator rightChild = scalarOperator.getChild(1);
+            BinaryType binaryType = binary.getBinaryType();
+            if (binaryType.isEqualOrRange() && leftChild.isColumnRef() && rightChild.isConstantRef()) {
+                return true;
+            } else {
+                return false;
+            }
+        } if (scalarOperator instanceof CompoundPredicateOperator) {
+            CompoundPredicateOperator compound = scalarOperator.cast();
+            if (!compound.isAnd()) {
+                return false;
+            }
+            return isRangePredicate(compound.getChild(0)) && isRangePredicate(compound.getChild(1));
+        } else {
+            return false;
+        }
+    }
+
+    private static int getPredicateByRange(List<ScalarOperator> srcItems, List<ScalarOperator> targetItems) {
+        for (ScalarOperator srcItem : srcItems) {
+            List<ScalarOperator> srcConjuncts = Utils.extractConjuncts(srcItem);
+            boolean matched = false;
+            for (ScalarOperator targetItem : targetItems) {
+                RangeSimplifier rangeSimplifier = new RangeSimplifier(srcConjuncts);
+                List<ScalarOperator> targetConjuncts = Utils.extractConjuncts(targetItem);
+                ScalarOperator result = rangeSimplifier.simplify(targetConjuncts);
+                if (result != null) {
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) {
+                // not matched
+                return 0;
+            }
+        }
+        return 1;
+    }
+
+    private static int getPredicateByEqual(List<ScalarOperator> srcItems, List<ScalarOperator> targetItems) {
         if (!new HashSet<>(targetItems).containsAll(srcItems)) {
-            return null;
+            // not matched
+            return 0;
         }
         targetItems.removeAll(srcItems);
         if (targetItems.isEmpty()) {
+            // exactly matched
             // it is the same, so return true constant
-            return ConstantOperator.createBoolean(true);
+            return 1;
         } else {
+            // contained
             // the target has more or item, so return src
-            return src;
+            return 2;
         }
     }
 
