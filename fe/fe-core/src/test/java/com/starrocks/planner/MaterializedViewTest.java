@@ -3325,4 +3325,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "     partitions=1/1");
         }
     }
+
+    @Test
+    public void testOrPredicates() {
+        String mv = "select * from lineorder where lo_orderkey < 1000 or lo_linenumber > 5000";
+        String query = "select * from lineorder where lo_orderkey < 500 or lo_linenumber > 10000";
+        MVRewriteChecker checker = testRewriteOK(mv, query);
+    }
 }
