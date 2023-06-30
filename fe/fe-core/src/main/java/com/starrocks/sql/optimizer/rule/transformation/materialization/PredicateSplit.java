@@ -83,6 +83,7 @@ public class PredicateSplit {
     }
 
     // split predicate into three parts: equal columns predicates, range predicates, and residual predicates
+    /*
     public static PredicateSplit splitPredicate(ScalarOperator predicate) {
         if (predicate == null) {
             return PredicateSplit.of(null, null, null);
@@ -98,6 +99,28 @@ public class PredicateSplit {
         }
         return PredicateSplit.of(Utils.compoundAnd(extractor.columnEqualityPredicates), Utils.compoundAnd(rangePredicates),
             Utils.compoundAnd(extractor.residualPredicates));
+    }
+
+     */
+
+    public static PredicateSplit splitPredicate(ScalarOperator predicate) {
+        if (predicate == null) {
+            return PredicateSplit.of(null, null, null);
+        }
+        List<ScalarOperator> rangePredicates = Lists.newArrayList();
+        PredicateExtractor extractor = new PredicateExtractor();
+        RangePredicate rangePredicate =
+                predicate.accept(extractor, new PredicateExtractor.RangeExtractorContext());
+        ScalarOperator equalityConjunct = Utils.compoundAnd(extractor.getColumnEqualityPredicates());
+        ScalarOperator rangeConjunct = null;
+        ScalarOperator residualConjunct = Utils.compoundAnd(extractor.getResidualPredicates());
+        if (rangePredicate != null) {
+            // convert rangePredicate to rangeConjunct
+            rangeConjunct = rangePredicate.toScalarOperator();
+        } else if (extractor.getColumnEqualityPredicates().isEmpty() && extractor.getResidualPredicates().isEmpty()) {
+            residualConjunct = Utils.compoundAnd(residualConjunct, predicate);
+        }
+        return PredicateSplit.of(equalityConjunct, rangeConjunct, residualConjunct);
     }
 
     public static class RangeExtractorContext {

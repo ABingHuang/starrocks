@@ -53,7 +53,10 @@ public class RangeSimplifier {
     // left is ColumnRefOperator and right is ConstantOperator
     public ScalarOperator simplify(ScalarOperator target) {
         try {
-
+            RangePredicate srcRangePredicate = extractRangePredicate(srcPredicate);
+            RangePredicate targetRangePredicate = extractRangePredicate(target);
+            return srcRangePredicate.simplify(targetRangePredicate);
+            /*
             Map<ColumnRefOperator, TreeRangeSet<ConstantOperator>> srcColumnToRange =
                     extractColumnIdRangeMapping(srcPredicate);
             if (srcColumnToRange == null) {
@@ -109,10 +112,17 @@ public class RangeSimplifier {
                 }
                 return Utils.compoundAnd(result);
             }
+
+             */
         } catch (Exception e) {
             LOG.debug("Simplify scalar operator {} failed:", target, e);
             return null;
         }
+    }
+
+    private RangePredicate extractRangePredicate(ScalarOperator scalarOperator) {
+        PredicateExtractor extractor = new PredicateExtractor();
+        return scalarOperator.accept(extractor, new PredicateExtractor.RangeExtractorContext());
     }
 
     private Map<Integer, Range<ConstantOperator>> extractColumnIdRangeMapping(List<ScalarOperator> predicates) {
