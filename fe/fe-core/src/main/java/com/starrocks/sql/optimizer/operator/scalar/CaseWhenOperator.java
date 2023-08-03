@@ -196,10 +196,10 @@ public class CaseWhenOperator extends CallOperator {
             return false;
         }
         CaseWhenOperator that = (CaseWhenOperator) o;
-        return hasCase == that.hasCase &&
-                hasElse == that.hasElse &&
-                whenStart == that.whenStart &&
-                whenEnd == that.whenEnd;
+        return hasCase.equals(that.hasCase) &&
+                hasElse.equals(that.hasElse) &&
+                whenStart.equals(that.whenStart) &&
+                whenEnd.equals(that.whenEnd);
     }
 
 
