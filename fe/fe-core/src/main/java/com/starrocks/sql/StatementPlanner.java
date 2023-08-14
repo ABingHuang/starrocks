@@ -15,6 +15,8 @@
 package com.starrocks.sql;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -41,7 +43,9 @@ import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
@@ -137,9 +141,19 @@ public class StatementPlanner {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan;
 
+        Map<LogicalViewScanOperator, LogicalPlan> viewPlanMap = Maps.newHashMap();
         try (Timer ignored = Tracers.watchScope("Transformer")) {
-            logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
+            logicalPlan = new RelationTransformer(columnRefFactory, session, viewPlanMap).transformWithSelectLimit(query);
         }
+
+        /*LogicalPlan logicalPlanWithView;
+
+        // just poc
+        // TODO: consider where and how to pass it?
+        try (Timer ignored = Tracers.watchScope("TransformerWithView")) {
+            *//*logicalPlanWithView = new RelationTransformer(columnRefFactory, session, true).transformWithSelectLimit(query);*//*
+            logicalPlanWithView = extraceLogicalPlanWithView(logicalPlan);
+        }*/
 
         OptExpression optimizedPlan;
         try (Timer ignored = Tracers.watchScope("Optimizer")) {
@@ -148,6 +162,7 @@ public class StatementPlanner {
             optimizedPlan = optimizer.optimize(
                     session,
                     logicalPlan.getRoot(),
+                    viewPlanMap,
                     new PhysicalPropertySet(),
                     new ColumnRefSet(logicalPlan.getOutputColumn()),
                     columnRefFactory);
@@ -198,10 +213,20 @@ public class StatementPlanner {
                 unLock(dbs);
             }
 
+            Map<LogicalViewScanOperator, LogicalPlan> viewPlanMap = Maps.newHashMap();
             LogicalPlan logicalPlan;
             try (Timer ignored = Tracers.watchScope("Transformer")) {
-                logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
+                logicalPlan = new RelationTransformer(columnRefFactory, session, viewPlanMap).transformWithSelectLimit(query);
             }
+
+            // just poc
+            // TODO: consider where and how to pass it?
+            /*LogicalPlan logicalPlanWithView;
+            try (Timer ignored = Tracers.watchScope("TransformerWithView")) {
+                // TODO: 优化一下这个逻辑，只有包含view的plan才需要走这个逻辑
+                *//*logicalPlanWithView = new RelationTransformer(columnRefFactory, session, true).transformWithSelectLimit(query);*//*
+                logicalPlanWithView = extraceLogicalPlanWithView(logicalPlan);
+            }*/
 
             OptExpression optimizedPlan;
             try (Timer ignored = Tracers.watchScope("Optimizer")) {
@@ -210,6 +235,7 @@ public class StatementPlanner {
                 optimizedPlan = optimizer.optimize(
                         session,
                         logicalPlan.getRoot(),
+                        viewPlanMap,
                         new PhysicalPropertySet(),
                         new ColumnRefSet(logicalPlan.getOutputColumn()),
                         columnRefFactory);
@@ -241,6 +267,24 @@ public class StatementPlanner {
         Preconditions.checkState(false, "The tablet write operation update metadata " +
                 "take a long time");
         return null;
+    }
+
+    private static LogicalPlan extraceLogicalPlanWithView(LogicalPlan logicalPlan) {
+        OptExprBuilder root = extraceLogicalPlanWithView(logicalPlan.getRootBuilder());
+        return new LogicalPlan(root, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
+    }
+
+    private static OptExprBuilder extraceLogicalPlanWithView(OptExprBuilder builder) {
+        List<OptExprBuilder> inputs = Lists.newArrayList();
+        if (builder.getRoot().getOp().getEquivalentOp() != null) {
+            return new OptExprBuilder(builder.getRoot().getOp().getEquivalentOp(), inputs, builder.getExpressionMapping());
+        } else {
+            for (OptExprBuilder input : builder.getInputs()) {
+                OptExprBuilder newInput = extraceLogicalPlanWithView(input);
+                inputs.add(newInput);
+            }
+            return new OptExprBuilder(builder.getRoot().getOp(), inputs, builder.getExpressionMapping());
+        }
     }
 
     // Lock all database before analyze

@@ -28,6 +28,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
@@ -43,6 +44,7 @@ import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.FieldId;
 import com.starrocks.sql.analyzer.RelationFields;
@@ -81,6 +83,7 @@ import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
@@ -109,6 +112,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionTableSca
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -140,19 +144,59 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
     private final ExpressionMapping outer;
     private final CTETransformerContext cteContext;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
+    private final boolean keepView;
+    // used by MaterializedViewOptimizer to find partition column in view based mv rewrite
+    // which is used to construct compensation partition predicates
+    private final Pair<Table, Column> partitionInfo;
 
+    private final Map<LogicalViewScanOperator, LogicalPlan> viewPlanMap;
+
+    // TODO: refactor these constructor
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session) {
+        this(columnRefFactory, session, false);
+    }
+
+    public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
+                               Map<LogicalViewScanOperator, LogicalPlan> viewPlanMap) {
+        this(columnRefFactory, session, new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
+                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit()),
+                false, null, viewPlanMap);
+    }
+
+    public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, boolean keepView) {
         this(columnRefFactory, session,
                 new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit()));
+                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit()), keepView, null, null);
+    }
+
+    public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
+                               boolean keepView, Pair<Table, Column> partitionInfo) {
+        this(columnRefFactory, session,
+                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
+                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit()),
+                keepView, partitionInfo, null);
     }
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer,
                                CTETransformerContext cteContext) {
+        this(columnRefFactory, session, outer, cteContext, false, null, null);
+    }
+
+    public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer,
+                               CTETransformerContext cteContext, boolean keepView) {
+        this(columnRefFactory, session, outer, cteContext, keepView, null, null);
+    }
+
+    public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer,
+                               CTETransformerContext cteContext, boolean keepView, Pair<Table, Column> partitionInfo,
+                               Map<LogicalViewScanOperator, LogicalPlan> viewPlanMap) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.outer = outer;
         this.cteContext = cteContext;
+        this.keepView = keepView;
+        this.partitionInfo = partitionInfo;
+        this.viewPlanMap = viewPlanMap;
     }
 
     // transform relation to plan with session variable sql_select_limit
@@ -236,7 +280,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
     @Override
     public LogicalPlan visitSelect(SelectRelation node, ExpressionMapping context) {
-        return new QueryTransformer(columnRefFactory, session, cteContext).plan(node, outer);
+        return new QueryTransformer(columnRefFactory, session, cteContext, keepView, partitionInfo, viewPlanMap)
+                .plan(node, outer);
     }
 
     @Override
@@ -646,12 +691,191 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
     @Override
     public LogicalPlan visitView(ViewRelation node, ExpressionMapping context) {
-        LogicalPlan logicalPlan = transform(node.getQueryStatement().getQueryRelation());
+        if (keepView) {
+            ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
+            ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = ImmutableMap.builder();
+            ImmutableList.Builder<ColumnRefOperator> outputVariablesBuilder = ImmutableList.builder();
+
+            int relationId = columnRefFactory.getNextRelationId();
+            for (Column column : node.getView().getBaseSchema()) {
+                ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
+                        column.getType(),
+                        column.isAllowNull());
+                columnRefFactory.updateColumnToRelationIds(columnRef.getId(), relationId);
+                columnRefFactory.updateColumnRefToColumns(columnRef, column, node.getView());
+                outputVariablesBuilder.add(columnRef);
+                colRefToColumnMetaMapBuilder.put(columnRef, column);
+                columnMetaToColRefMapBuilder.put(column, columnRef);
+            }
+
+            Map<Column, ColumnRefOperator> columnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
+            List<ColumnRefOperator> outputVariables = outputVariablesBuilder.build();
+            ImmutableMap<ColumnRefOperator, Column> columnRefOperatorToColumn = colRefToColumnMetaMapBuilder.build();
+            boolean hasPartitionColumn = false;
+            if (partitionInfo != null) {
+                Map<TableName, Table> baseTables = AnalyzerUtils.collectAllTableAndView(node.getQueryStatement());
+                if (baseTables.containsValue(partitionInfo.first)
+                        && outputVariables.stream()
+                        .anyMatch(column -> column.getName().equalsIgnoreCase(partitionInfo.second.getName()))) {
+                    hasPartitionColumn = true;
+                }
+            }
+
+            LogicalViewScanOperator scanOperator = new LogicalViewScanOperator(
+                    node.getView(), columnRefOperatorToColumn, columnMetaToColRefMap, hasPartitionColumn);
+            OptExprBuilder scanBuilder = new OptExprBuilder(scanOperator, Collections.emptyList(),
+                    new ExpressionMapping(node.getScope(), outputVariables));
+            return new LogicalPlan(scanBuilder, outputVariables, null);
+        } else {
+            LogicalPlan logicalPlan = transform(node.getQueryStatement().getQueryRelation());
+            OptExprBuilder builder = new OptExprBuilder(
+                    logicalPlan.getRoot().getOp(),
+                    logicalPlan.getRootBuilder().getInputs(),
+                    new ExpressionMapping(node.getScope(), logicalPlan.getOutputColumn()));
+            LogicalPlan viewLogicalPlan = new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
+
+            if (viewPlanMap != null) {
+                ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
+                ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = ImmutableMap.builder();
+
+                // must use the same output columns as original operator
+                List<ColumnRefOperator> outputColumns = logicalPlan.getOutputColumn();
+                List<Column> viewSchema = node.getView().getBaseSchema();
+                Preconditions.checkState(outputColumns.size() == viewSchema.size());
+                int relationId = columnRefFactory.getNextRelationId();
+                Map<ColumnRefOperator, ScalarOperator> projectionMap = Maps.newHashMap();
+                for (int i = 0; i < outputColumns.size(); i++) {
+                    Column column = viewSchema.get(i);
+                    ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
+                            column.getType(),
+                            column.isAllowNull());
+                    /*ColumnRefOperator outputColumn = outputColumns.get(i);
+                    ColumnRefOperator columnRef = columnRefFactory.create(outputColumn.getName(),
+                            outputColumn.getType(), outputColumn.isNullable());*/
+                    columnRefFactory.updateColumnToRelationIds(columnRef.getId(), relationId);
+                    columnRefFactory.updateColumnRefToColumns(columnRef, column, node.getView());
+                    colRefToColumnMetaMapBuilder.put(columnRef, viewSchema.get(i));
+                    columnMetaToColRefMapBuilder.put(viewSchema.get(i), columnRef);
+                    projectionMap.put(outputColumns.get(i), columnRef);
+                }
+                // add a projection to make sure output columns keep the same
+                Projection projection = new Projection(projectionMap);
+
+                Map<Column, ColumnRefOperator> columnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
+                ImmutableMap<ColumnRefOperator, Column> columnRefOperatorToColumn = colRefToColumnMetaMapBuilder.build();
+                boolean hasPartitionColumn = false;
+                if (partitionInfo != null) {
+                    Map<TableName, Table> baseTables = AnalyzerUtils.collectAllTableAndView(node.getQueryStatement());
+                    if (baseTables.containsValue(partitionInfo.first) && outputColumns.stream().anyMatch(
+                            column -> column.getName().equalsIgnoreCase(partitionInfo.second.getName()))) {
+                        hasPartitionColumn = true;
+                    }
+                }
+
+                LogicalViewScanOperator scanOperator = new LogicalViewScanOperator(
+                        node.getView(), columnRefOperatorToColumn, columnMetaToColRefMap, hasPartitionColumn);
+                scanOperator.setProjection(projection);
+                // set op equivalence
+                builder.getRoot().getOp().setEquivalentOp(scanOperator);
+                // scanOperator.setEquivalentOp(builder.getRoot().getOp());
+
+                /*// set expression equivalence
+                // TODO: maybe this is useless because the lack of transmissibility for OptExpression
+                OptExpression viewScanExpr = OptExpression.create(scanOperator);
+                viewScanExpr.setEquivalentExpr(logicalPlan.getRoot());
+                logicalPlan.getRoot().setEquivalentExpr(viewScanExpr);*/
+                /*return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());*/
+                viewPlanMap.put(scanOperator, viewLogicalPlan);
+            }
+            return viewLogicalPlan;
+        }
+        /*LogicalPlan logicalPlan = transform(node.getQueryStatement().getQueryRelation());
         OptExprBuilder builder = new OptExprBuilder(
                 logicalPlan.getRoot().getOp(),
                 logicalPlan.getRootBuilder().getInputs(),
                 new ExpressionMapping(node.getScope(), logicalPlan.getOutputColumn()));
-        return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
+        if (keepView) {
+            ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
+            ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = ImmutableMap.builder();
+
+            // must use the same output columns as original operator
+            List<ColumnRefOperator> outputColumns = logicalPlan.getOutputColumn();
+            List<Column> viewSchema = node.getView().getBaseSchema();
+            Preconditions.checkState(outputColumns.size() == viewSchema.size());
+            for (int i = 0; i < outputColumns.size(); i++) {
+                colRefToColumnMetaMapBuilder.put(outputColumns.get(i), viewSchema.get(i));
+                columnMetaToColRefMapBuilder.put(viewSchema.get(i), outputColumns.get(i));
+            }
+
+            Map<Column, ColumnRefOperator> columnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
+            ImmutableMap<ColumnRefOperator, Column> columnRefOperatorToColumn = colRefToColumnMetaMapBuilder.build();
+            boolean hasPartitionColumn = false;
+            if (partitionInfo != null) {
+                Map<TableName, Table> baseTables = AnalyzerUtils.collectAllTableAndView(node.getQueryStatement());
+                if (baseTables.containsValue(partitionInfo.first)
+                        && outputColumns.stream().anyMatch(
+                        column -> column.getName().equalsIgnoreCase(partitionInfo.second.getName()))) {
+                    hasPartitionColumn = true;
+                }
+            }
+
+            LogicalViewScanOperator scanOperator = new LogicalViewScanOperator(
+                    node.getView(), columnRefOperatorToColumn, columnMetaToColRefMap, hasPartitionColumn);
+            // set op equivalence
+            logicalPlan.getRoot().getOp().setEquivalentOp(scanOperator);
+            scanOperator.setEquivalentOp(logicalPlan.getRoot().getOp());
+
+            // set expression equivalence
+            // TODO: maybe this is useless because the lack of transmissibility for OptExpression
+            OptExpression viewScanExpr = OptExpression.create(scanOperator);
+            viewScanExpr.setEquivalentExpr(logicalPlan.getRoot());
+            logicalPlan.getRoot().setEquivalentExpr(viewScanExpr);
+        }
+        return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());*/
+
+        /*if (keepView) {
+            ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
+            ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = ImmutableMap.builder();
+            ImmutableList.Builder<ColumnRefOperator> outputVariablesBuilder = ImmutableList.builder();
+
+            int relationId = columnRefFactory.getNextRelationId();
+            for (Column column : node.getView().getBaseSchema()) {
+                ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
+                        column.getType(),
+                        column.isAllowNull());
+                columnRefFactory.updateColumnToRelationIds(columnRef.getId(), relationId);
+                columnRefFactory.updateColumnRefToColumns(columnRef, column, node.getView());
+                outputVariablesBuilder.add(columnRef);
+                colRefToColumnMetaMapBuilder.put(columnRef, column);
+                columnMetaToColRefMapBuilder.put(column, columnRef);
+            }
+
+            Map<Column, ColumnRefOperator> columnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
+            List<ColumnRefOperator> outputVariables = outputVariablesBuilder.build();
+            ImmutableMap<ColumnRefOperator, Column> columnRefOperatorToColumn = colRefToColumnMetaMapBuilder.build();
+            boolean hasPartitionColumn = false;
+            if (partitionInfo != null) {
+                Map<TableName, Table> baseTables = AnalyzerUtils.collectAllTableAndView(node.getQueryStatement());
+                if (baseTables.containsValue(partitionInfo.first)
+                        && outputVariables.stream().anyMatch(
+                                column -> column.getName().equalsIgnoreCase(partitionInfo.second.getName()))) {
+                    hasPartitionColumn = true;
+                }
+            }
+
+            LogicalViewScanOperator scanOperator = new LogicalViewScanOperator(
+                    node.getView(), columnRefOperatorToColumn, columnMetaToColRefMap, hasPartitionColumn);
+            OptExprBuilder scanBuilder = new OptExprBuilder(scanOperator, Collections.emptyList(),
+                    new ExpressionMapping(node.getScope(), outputVariables));
+            return new LogicalPlan(scanBuilder, outputVariables, null);
+        } else {
+            LogicalPlan logicalPlan = transform(node.getQueryStatement().getQueryRelation());
+            OptExprBuilder builder = new OptExprBuilder(
+                    logicalPlan.getRoot().getOp(),
+                    logicalPlan.getRootBuilder().getInputs(),
+                    new ExpressionMapping(node.getScope(), logicalPlan.getOutputColumn()));
+            return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
+        }*/
     }
 
     @Override

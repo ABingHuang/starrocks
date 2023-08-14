@@ -802,4 +802,30 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         }
     }
 
+    @Test
+    public void testViewBaseMvRewriteOnHive() throws Exception {
+        String view = "create view hive_view_1 " +
+                "as " +
+                "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders`";
+        starRocksAssert.withView(view);
+        String mv = "CREATE MATERIALIZED VIEW `view_based_mv_1`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "PARTITION BY date_trunc('month', o_orderdate)\n" +
+                "DISTRIBUTED BY HASH(`o_orderkey`) BUCKETS 10\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"true\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM hive_view_1";
+        starRocksAssert.withMaterializedView(mv);
+        refreshMaterializedView("test", "view_based_mv_1");
+        {
+            String query = "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM hive_view_1";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "view_based_mv_1");
+        }
+        starRocksAssert.dropMaterializedView("view_based_mv_1");
+    }
 }

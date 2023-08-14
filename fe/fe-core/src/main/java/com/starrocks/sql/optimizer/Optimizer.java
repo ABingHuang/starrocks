@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
@@ -30,8 +31,14 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
+import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
@@ -84,14 +91,17 @@ import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PushDownSubfieldRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.validate.MVRewriteValidator;
 import com.starrocks.sql.optimizer.validate.OptExpressionValidator;
 import com.starrocks.sql.optimizer.validate.PlanValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -130,8 +140,18 @@ public class Optimizer {
                                   PhysicalPropertySet requiredProperty,
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory) {
-        prepare(connectContext, logicOperatorTree, columnRefFactory);
+        return optimize(connectContext, logicOperatorTree, null, requiredProperty, requiredColumns, columnRefFactory);
+    }
+
+    public OptExpression optimize(ConnectContext connectContext,
+                                  OptExpression logicOperatorTree,
+                                  Map<LogicalViewScanOperator, LogicalPlan> viewPlanMap,
+                                  PhysicalPropertySet requiredProperty,
+                                  ColumnRefSet requiredColumns,
+                                  ColumnRefFactory columnRefFactory) {
+        prepare(connectContext, logicOperatorTree, columnRefFactory, viewPlanMap, requiredColumns);
         context.setUpdateTableId(updateTableId);
+
         if (optimizerConfig.isRuleBased()) {
             return optimizeByRule(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
         } else {
@@ -185,6 +205,14 @@ public class Optimizer {
         }
 
         memo.init(logicOperatorTree);
+        if (context.getLogicalTreeWithView() != null) {
+            /*OptExpression planWithView = context.getLogicalTreeWithView();
+            Projection projection = rewriteProjection(logicOperatorTree, planWithView);
+            planWithView.getOp().setProjection(projection);
+            deriveLogicalProperty(planWithView);
+            memo.copyIn(memo.getRootGroup(), planWithView);*/
+            addViewBasedPlanIntoMemo(logicOperatorTree, context.getLogicalTreeWithView(), memo);
+        }
         OptimizerTraceUtil.log("after logical rewrite, root group:\n%s", memo.getRootGroup());
 
         // Currently, we cache output columns in logic property.
@@ -233,8 +261,19 @@ public class Optimizer {
         }
     }
 
-    private void prepare(ConnectContext connectContext, OptExpression logicOperatorTree,
-                         ColumnRefFactory columnRefFactory) {
+    private void addViewBasedPlanIntoMemo(OptExpression logicOperatorTree, OptExpression planWithView, Memo memo) {
+        /*Projection projection = rewriteProjection(logicOperatorTree, planWithView);
+        planWithView.getOp().setProjection(projection);
+        deriveLogicalProperty(planWithView);*/
+        memo.copyIn(memo.getRootGroup(), planWithView);
+    }
+
+    private void prepare(
+            ConnectContext connectContext,
+            OptExpression logicOperatorTree,
+            ColumnRefFactory columnRefFactory,
+            Map<LogicalViewScanOperator, LogicalPlan> viewPlanMap,
+            ColumnRefSet requiredColumns) {
         Memo memo = null;
         if (!optimizerConfig.isRuleBased()) {
             memo = new Memo();
@@ -262,6 +301,70 @@ public class Optimizer {
                         Config.enable_experimental_mv,
                         connectContext.getSessionVariable().isEnableMaterializedViewRewrite());
             }
+        }
+
+        // 在这里处理equivalent operator，构造LogicalViewScanOperator -> OptExpression的map
+        if (viewPlanMap != null && !viewPlanMap.isEmpty()) {
+            {
+                // TODO: rethink this logical
+                OptExpression logicalPlanWithView = extractLogicalPlanWithView(logicOperatorTree);
+
+                // optimize logicalOperatorTreeWithView by rules
+                // TODO: judge whether has views
+                // 把这个挪到prepare中
+                OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
+                Optimizer optimizer = new Optimizer(optimizerConfig);
+                OptExpression optimizedPlan = optimizer.optimize(
+                        connectContext,
+                        logicalPlanWithView,
+                        null,
+                        new PhysicalPropertySet(),
+                        requiredColumns,
+                        columnRefFactory);
+                context.setLogicalTreeWithView(optimizedPlan);
+            }
+
+            Map<LogicalViewScanOperator, OptExpression> optimizedViewPlanMap = Maps.newHashMap();
+            for (LogicalViewScanOperator viewScanOperator : viewPlanMap.keySet()) {
+                LogicalPlan viewLogicalPlan = viewPlanMap.get(viewScanOperator);
+                OptExpression viewLogicalTree = viewLogicalPlan.getRoot();
+
+                OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
+                optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
+                optimizerConfig.disableRuleSet(RuleSetType.MULTI_TABLE_MV_REWRITE);
+                Optimizer optimizer = new Optimizer(optimizerConfig);
+                OptExpression optimizedViewPlan = optimizer.optimize(
+                        connectContext,
+                        viewLogicalTree,
+                        null,
+                        new PhysicalPropertySet(),
+                        new ColumnRefSet(viewLogicalPlan.getOutputColumn()),
+                        columnRefFactory);
+                optimizedViewPlanMap.put(viewScanOperator, optimizedViewPlan);
+            }
+            context.setViewPlanMap(optimizedViewPlanMap);
+        }
+    }
+
+    private OptExpression extractLogicalPlanWithView(OptExpression logicalTree) {
+        List<OptExpression> inputs = Lists.newArrayList();
+        if (logicalTree.getOp().getEquivalentOp() != null) {
+            LogicalViewScanOperator viewScanOperator = logicalTree.getOp().getEquivalentOp().cast();
+            Projection projection = viewScanOperator.getProjection();
+            LogicalViewScanOperator.Builder builder = new LogicalViewScanOperator.Builder();
+            builder.withOperator(viewScanOperator);
+            builder.setProjection(null);
+            LogicalViewScanOperator clone = builder.build();
+            OptExpression viewScanExpr = OptExpression.create(clone);
+            LogicalProjectOperator projectOperator = new LogicalProjectOperator(projection.getColumnRefMap());
+            OptExpression projectionExpr = OptExpression.create(projectOperator, viewScanExpr);
+            return projectionExpr;
+        } else {
+            for (OptExpression input : logicalTree.getInputs()) {
+                OptExpression newInput = extractLogicalPlanWithView(input);
+                inputs.add(newInput);
+            }
+            return OptExpression.create(logicalTree.getOp(), inputs);
         }
     }
 
@@ -313,6 +416,7 @@ public class Optimizer {
         if (sessionVariable.isEnableRboTablePrune()) {
             context.setEnableLeftRightJoinEquivalenceDerive(false);
         }
+
         // inline CTE if consume use once
         while (cteContext.hasInlineCTE()) {
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INLINE_CTE);
@@ -431,6 +535,16 @@ public class Optimizer {
             // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
         }
+        // first try to apply view based mv rewrite rule
+        // because some view scan operators may be rewritten by mvs,
+        // but some view scans may not, we should rewrite unrewritten views back to its original plan tree
+        // and try to rewrite the total tree with the following rules
+        if (context.getLogicalTreeWithView() != null
+                && MvUtils.getAllTables(context.getLogicalTreeWithView()).size() == 1
+                && !optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)
+                && !rootTaskContext.getOptimizerContext().getCandidateMvs().isEmpty()) {
+            viewBasedMvRuleRewrite(tree, rootTaskContext);
+        }
 
         // NOTE: This rule should be after MV Rewrite because MV Rewrite cannot handle
         // select count(distinct c) from t group by a, b
@@ -440,6 +554,74 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new DeriveRangeJoinPredicateRule());
 
         return tree.getInputs().get(0);
+    }
+
+    // for single scan node, to make sure we can rewrite
+    private void viewBasedMvRuleRewrite(OptExpression tree, TaskContext rootTaskContext) {
+        try {
+            OptExpression treeWithView = context.getLogicalTreeWithView();
+            // should add a LogicalTreeAnchorOperator for rewrite
+            treeWithView = OptExpression.create(new LogicalTreeAnchorOperator(), treeWithView);
+            deriveLogicalProperty(treeWithView);
+            ruleRewriteIterative(treeWithView, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
+            boolean isRewritten = judgeIsRewritten(treeWithView);
+            if (isRewritten) {
+                // replace original tree plan
+                tree.setChild(0, treeWithView.inputAt(0));
+            }
+        } catch (Exception e) {
+            LOG.warn("view based mv rule rewrite failed.", e);
+        } finally {
+            // reset logical tree with view
+            context.setLogicalTreeWithView(null);
+        }
+    }
+
+    private boolean judgeIsRewritten(OptExpression tree) {
+        List<Operator> viewScanOperators = Lists.newArrayList();
+        collectViewScanOperator(tree, viewScanOperators);
+        return viewScanOperators.size() < context.getViewPlanMap().size();
+    }
+
+    private void collectViewScanOperator(OptExpression tree, Collection<Operator> viewScanOperators) {
+        if (tree.getOp() instanceof LogicalViewScanOperator) {
+            viewScanOperators.add(tree.getOp());
+        } else {
+            for (OptExpression input : tree.getInputs()) {
+                collectViewScanOperator(input, viewScanOperators);
+            }
+        }
+    }
+
+    private Projection rewriteProjection(OptExpression tree, OptExpression treeWithView) {
+        ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
+        // should add projection to make sure the output columns are the same with original logical tree
+        Map<ColumnRefOperator, ColumnRefOperator> columnMap = Maps.newHashMap();
+        List<ColumnRefOperator> originColumns = tree.getOutputColumns().getColumnRefOperators(columnRefFactory);
+        List<ColumnRefOperator> newColumns = treeWithView.getOutputColumns().getColumnRefOperators(columnRefFactory);
+        /*// the output column name must be the same
+        for (ColumnRefOperator newColumn : newColumns) {
+            Optional<ColumnRefOperator> mapping = originColumns.stream().filter(
+                    columnRef -> columnRef.getName().equalsIgnoreCase(newColumn.getName())).findFirst();
+            Preconditions.checkState(mapping.isPresent());
+            columnMap.put(newColumn, mapping.get());
+        }*/
+        for (int i = 0; i < originColumns.size(); i++) {
+            columnMap.put(newColumns.get(i), originColumns.get(i));
+        }
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
+        if (treeWithView.getOp().getProjection() == null) {
+            for (int i = 0; i < originColumns.size(); i++) {
+                columnRefMap.put(originColumns.get(i), newColumns.get(i));
+            }
+        } else {
+            Map<ColumnRefOperator, ScalarOperator> oldRefMap = treeWithView.getOp().getProjection().getColumnRefMap();
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : oldRefMap.entrySet()) {
+                columnRefMap.put(columnMap.get(entry.getKey()), entry.getValue());
+            }
+        }
+        Projection projection = new Projection(columnRefMap);
+        return projection;
     }
 
     private boolean isEnableSingleTableMVRewrite(TaskContext rootTaskContext,
@@ -589,6 +771,10 @@ public class Optimizer {
             }
             context.getRuleSet().addMultiTableMvRewriteRule();
         }
+        /*if (context.getLogicalTreeWithView() != null) {
+            context.getRuleSet().addSingleTableMvRewriteRule();
+            context.getRuleSet().addMultiTableMvRewriteRule();
+        }*/
 
         context.getTaskScheduler().pushTask(new OptimizeGroupTask(rootTaskContext, memo.getRootGroup()));
         context.getTaskScheduler().executeTasks(rootTaskContext);

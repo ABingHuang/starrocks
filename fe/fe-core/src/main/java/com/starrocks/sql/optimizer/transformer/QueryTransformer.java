@@ -26,6 +26,8 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
@@ -46,6 +48,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -66,12 +69,19 @@ class QueryTransformer {
     private final ConnectContext session;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
     private final CTETransformerContext cteContext;
+    private final boolean keepView;
+    private final Pair<Table, Column> partitionInfo;
+    private final Map<LogicalViewScanOperator, LogicalPlan> viewPlanMap;
 
     public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
-                            CTETransformerContext cteContext) {
+                            CTETransformerContext cteContext, boolean keepView, Pair<Table, Column> partitionInfo,
+                            Map<LogicalViewScanOperator, LogicalPlan> viewPlanMap) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.cteContext = cteContext;
+        this.keepView = keepView;
+        this.partitionInfo = partitionInfo;
+        this.viewPlanMap = viewPlanMap;
     }
 
     public LogicalPlan plan(SelectRelation queryBlock, ExpressionMapping outer) {
@@ -155,7 +165,8 @@ class QueryTransformer {
         // and the internal cte with the same name will overwrite the original mapping
         CTETransformerContext newCteContext = new CTETransformerContext(cteContext);
         return new RelationTransformer(columnRefFactory, session,
-                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())), newCteContext)
+                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
+                newCteContext, keepView, partitionInfo, viewPlanMap)
                 .visit(node).getRootBuilder();
     }
 
