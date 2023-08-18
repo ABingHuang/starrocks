@@ -94,13 +94,13 @@ public class ColumnRangePredicate extends RangePredicate {
                 if (range.lowerBoundType() == BoundType.CLOSED
                         && range.upperBoundType() == BoundType.CLOSED
                         && range.upperEndpoint().equals(range.lowerEndpoint())) {
-                    andOperators.add(BinaryPredicateOperator.eq(columnRef, range.lowerEndpoint()));
+                    orOperators.add(BinaryPredicateOperator.eq(columnRef, range.lowerEndpoint()));
                     continue;
                 } else if (range.lowerBoundType() == BoundType.CLOSED
                         && range.upperBoundType() == BoundType.OPEN
                         && range.lowerEndpoint().nextValue().isPresent()
                         && range.upperEndpoint().equals(range.lowerEndpoint().nextValue().get())) {
-                    andOperators.add(BinaryPredicateOperator.eq(columnRef, range.lowerEndpoint()));
+                    orOperators.add(BinaryPredicateOperator.eq(columnRef, range.lowerEndpoint()));
                     continue;
                 }
             }
