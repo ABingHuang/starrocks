@@ -158,6 +158,7 @@ public class CostModel {
                 ConnectContext ctx = ConnectContext.get();
                 SessionVariable sessionVariable = ctx.getSessionVariable();
                 if (sessionVariable.isEnableMaterializedViewForceRewrite()) {
+                    statistics.setRewrittenByMV(true);
                     return CostEstimate.zero();
                 }
 

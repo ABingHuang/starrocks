@@ -34,10 +34,13 @@ public class Statistics {
     // this causes the table row count stored in FE to be inaccurate.
     private final boolean tableRowCountMayInaccurate;
 
+    private boolean rewrittenByMV;
+
     private Statistics(Builder builder) {
         this.outputRowCount = builder.outputRowCount;
         this.columnStatistics = builder.columnStatistics;
         this.tableRowCountMayInaccurate = builder.tableRowCountMayInaccurate;
+        this.rewrittenByMV = false;
     }
 
     public double getOutputRowCount() {
@@ -61,7 +64,7 @@ public class Statistics {
 
     public double getComputeSize() {
         // Make it at least 1 byte, otherwise the cost model would propagate estimate error
-        return Math.max(1.0, this.columnStatistics.values().stream().map(ColumnStatistic::getAverageRowSize).
+        return rewrittenByMV ? 0 : Math.max(1.0, this.columnStatistics.values().stream().map(ColumnStatistic::getAverageRowSize).
                 reduce(0.0, Double::sum)) * outputRowCount;
     }
 
@@ -99,6 +102,14 @@ public class Statistics {
             usedColumns.union(entry.getKey().getUsedColumns());
         }
         return usedColumns;
+    }
+
+    public boolean isRewrittenByMV() {
+        return rewrittenByMV;
+    }
+
+    public void setRewrittenByMV(boolean rewrittenByMV) {
+        this.rewrittenByMV = rewrittenByMV;
     }
 
     @Override
