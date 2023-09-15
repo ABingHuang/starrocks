@@ -178,10 +178,10 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
                 return null;
             }
         }
+        if (rangePredicates.size() == 1 && (rangePredicates.get(0) instanceof ColumnRangePredicate)) {
+            return rangePredicates.get(0);
+        }
         if (predicate.isAnd()) {
-            if (rangePredicates.size() == 1 && (rangePredicates.get(0) instanceof ColumnRangePredicate)) {
-                return rangePredicates.get(0);
-            }
             return new AndRangePredicate(rangePredicates);
         } else {
             return new OrRangePredicate(rangePredicates);
