@@ -113,7 +113,12 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
 
          */
         List<ScalarOperator> onPredicates = MvUtils.collectOnPredicate(queryExpression);
-        onPredicates = onPredicates.stream().map(MvUtils::canonizePredicateForRewrite).collect(Collectors.toList());
+        onPredicates = onPredicates.stream().map(MvUtils::canonizePredicateForRewrite).map(predicate -> {
+            ReplaceColumnRefRewriter rewriter =
+                    new ReplaceColumnRefRewriter(queryExpression.getOp().getProjection().getColumnRefMap());
+            return rewriter.rewrite(predicate);
+        }).collect(Collectors.toList());
+
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         for (MaterializationContext mvContext : mvCandidateContexts) {
             MvRewriteContext mvRewriteContext;
