@@ -894,7 +894,7 @@ public class MvUtils {
             return partitionPredicates;
         }
         if (mv.getPartitionInfo() instanceof SinglePartitionInfo) {
-            return partitionPredicates;
+            return olapScanOperator.getPrunedPartitionPredicates();
         }
 
         Pair<Table, Column> partitionTableAndColumns = mv.getBaseTableAndPartitionColumn();
