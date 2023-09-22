@@ -409,7 +409,7 @@ public class Explain {
             PhysicalJoinOperator join = (PhysicalJoinOperator) optExpression.getOp();
             StringBuilder sb =
                     new StringBuilder("- ").append(join.getJoinAlgo()).append("/").append(join.getJoinType());
-            if (!join.getJoinType().isCrossJoin()) {
+            if (!isCrossJoin(join)) {
                 sb.append(" [").append(new ExpressionPrinter().print(join.getOnPredicate())).append("]");
             }
             sb.append(buildOutputColumns(join, ""));
@@ -417,6 +417,10 @@ public class Explain {
             buildCostEstimate(sb, optExpression, context.step);
             buildCommonProperty(sb, join, context.step);
             return new OperatorStr(sb.toString(), context.step, Arrays.asList(left, right));
+        }
+
+        private boolean isCrossJoin(PhysicalJoinOperator join) {
+            return join.getJoinType().isCrossJoin() || (join.getJoinType().isInnerJoin() && join.getOnPredicate() == null);
         }
 
         @Override
