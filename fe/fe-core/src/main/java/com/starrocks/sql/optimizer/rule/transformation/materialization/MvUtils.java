@@ -303,7 +303,7 @@ public class MvUtils {
      * Whether `root` and its children are all Select/Project/Join/Group ops,
      * NOTE: This method requires `root` must be Aggregate op to check whether MV is satisfiable quickly.
      */
-    public static boolean isLogicalSPJG(OptExpression root, int level) {
+    private static boolean isLogicalSPJG(OptExpression root, int level) {
         if (root == null) {
             return false;
         }
