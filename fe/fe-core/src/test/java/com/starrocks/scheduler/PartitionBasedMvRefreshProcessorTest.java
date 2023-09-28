@@ -1413,7 +1413,62 @@ public class PartitionBasedMvRefreshProcessorTest {
     }
 
     @Test
-    public void testRangePartitionWithJDBCTableUseStr2DateWithMaxValue() throws Exception {
+    public void test_str2date_date_trunc() throws Exception {
+        MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
+        MockedJDBCMetadata mockedJDBCMetadata =
+                (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();
+        mockedJDBCMetadata.initPartitions();
+
+        String mvName = "jdbc_parttbl_str2date";
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+
+        // full refresh
+        {
+            starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " force with sync mode");
+            List<String> partitions =
+                    materializedView.getPartitions().stream().map(Partition::getName).sorted()
+                            .collect(Collectors.toList());
+            Assert.assertEquals(Arrays.asList("p000101_202308", "p202308_202309"), partitions);
+        }
+
+        // partial range refresh 1
+        {
+            Map<String, Long> partitionVersionMap = materializedView.getPartitions().stream().collect(
+                    Collectors.toMap(Partition::getName, Partition::getVisibleVersion));
+            starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName +
+                    " partition start('2023-08-02') end('2023-09-01')" +
+                    "force with sync mode");
+            List<String> partitions =
+                    materializedView.getPartitions().stream().map(Partition::getName).sorted()
+                            .collect(Collectors.toList());
+            Assert.assertEquals(Arrays.asList("p000101_202308", "p202308_202309"), partitions);
+            Assert.assertEquals(partitionVersionMap.get("p000101_202308").longValue(),
+                    materializedView.getPartition("p000101_202308").getVisibleVersion());
+            Assert.assertTrue(partitionVersionMap.get("p202308_202309") <
+                    materializedView.getPartition("p202308_202309").getVisibleVersion());
+        }
+
+        // partial range refresh 2
+        {
+            Map<String, Long> partitionVersionMap = materializedView.getPartitions().stream().collect(
+                    Collectors.toMap(Partition::getName, Partition::getVisibleVersion));
+            starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName +
+                    " partition start('2023-07-01') end('2023-08-01')" +
+                    "force with sync mode");
+            List<String> partitions =
+                    materializedView.getPartitions().stream().map(Partition::getName).sorted()
+                            .collect(Collectors.toList());
+            Assert.assertEquals(Arrays.asList("p000101_202308", "p202308_202309"), partitions);
+            Assert.assertEquals(partitionVersionMap.get("p000101_202308") + 1,
+                    materializedView.getPartition("p000101_202308").getVisibleVersion());
+            Assert.assertEquals(partitionVersionMap.get("p202308_202309").longValue(),
+                    materializedView.getPartition("p202308_202309").getVisibleVersion());
+        }
+    }
+
+    @Test
+    public void testRangePartitionWithJDBCTableUseStr2Date3() throws Exception {
         MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
         MockedJDBCMetadata mockedJDBCMetadata =
                 (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();
