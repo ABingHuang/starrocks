@@ -38,6 +38,7 @@ import com.starrocks.sql.optimizer.rule.transformation.ApplyExceptionRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
 import com.starrocks.sql.optimizer.rule.transformation.LimitPruneTabletsRule;
+import com.starrocks.sql.optimizer.rule.transformation.MVRewriteBoxingRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
@@ -174,6 +175,12 @@ public class Optimizer {
 
         memo.init(logicOperatorTree);
         OptimizerTraceUtil.log("after logical rewrite, root group:\n%s", memo.getRootGroup());
+
+        if (MVRewriteBoxingRule.getInstance().check(logicOperatorTree,, context)) {
+            List<OptExpression> boxingTree = MVRewriteBoxingRule.getInstance().transform(logicOperatorTree, context);
+            Preconditions.checkState(boxingTree.size() == 1);
+            memo.copyIn(logicOperatorTree.getGroupExpression().getGroup(), boxingTree.get(0));
+        }
 
         // collect all olap scan operator
         collectAllScanOperators(memo, rootTaskContext);
@@ -403,6 +410,9 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, SplitScanORToUnionRule.getInstance());
+
+        // only apply for mv, not for query
+        ruleRewriteOnlyOnce(tree, rootTaskContext, MVRewriteBoxingRule.getInstance());
 
         if (isEnableSingleTableMVRewrite(rootTaskContext, sessionVariable, tree)) {
             // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
