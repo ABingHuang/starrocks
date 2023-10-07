@@ -14,8 +14,18 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
+import com.starrocks.catalog.Column;
+import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+
+import java.util.List;
+import java.util.Map;
 
 // a virtual scan operator used by mv rewrite, which packages the complex logical plan, make
 // it satisfy SPJG pattern, and make the mv rewrite rules more general.
@@ -27,9 +37,26 @@ public class LogicalBoxOperator extends LogicalScanOperator {
         this.equalLogicalPlan = equalLogicalPlan;
     }
 
-    // TODO：构造column ref map
-    public static LogicalBoxOperator create(OptExpression equalLogicalPlan) {
-        return new LogicalBoxOperator(equalLogicalPlan);
+    public static LogicalBoxOperator create(OptExpression equalLogicalPlan, OptimizerContext optimizerContext) {
+        Preconditions.checkState(equalLogicalPlan.getOp() instanceof LogicalOperator);
+        LogicalOperator op = equalLogicalPlan.getOp().cast();
+        ExpressionContext context = new ExpressionContext(equalLogicalPlan);
+        context.deriveLogicalProperty();
+        ColumnRefSet refSet = op.getOutputColumns(context);
+        List<ColumnRefOperator> outputColumns = refSet.getColumnRefOperators(optimizerContext.getColumnRefFactory());
+        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = Maps.newHashMap();
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = Maps.newHashMap();
+        for (ColumnRefOperator columnRef : outputColumns) {
+            Column column = new Column(columnRef.getName(), columnRef.getType(), columnRef.isNullable());
+            colRefToColumnMetaMap.put(columnRef, column);
+            columnMetaToColRefMap.put(column, columnRef);
+        }
+        LogicalBoxOperator.Builder builder = new Builder();
+        builder.setColRefToColumnMetaMap(colRefToColumnMetaMap);
+        builder.setColumnMetaToColRefMap(columnMetaToColRefMap);
+        builder.setEqualLogicalPlan(equalLogicalPlan);
+        // should we care about table?
+        return builder.build();
     }
 
     public static Builder builder() {
@@ -48,6 +75,11 @@ public class LogicalBoxOperator extends LogicalScanOperator {
         public Builder withOperator(LogicalBoxOperator boxOperator) {
             super.withOperator(boxOperator);
             this.equalLogicalPlan = boxOperator.equalLogicalPlan;
+            return this;
+        }
+
+        public Builder setEqualLogicalPlan(OptExpression equalLogicalPlan) {
+            this.equalLogicalPlan = equalLogicalPlan;
             return this;
         }
     }

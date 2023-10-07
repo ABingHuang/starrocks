@@ -15,13 +15,17 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.rule.transformation.MVRewriteBoxingRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+
+import java.util.List;
 
 public class MaterializedViewOptimizer {
     public MvPlanContext optimize(MaterializedView mv,
@@ -35,6 +39,12 @@ public class MaterializedViewOptimizer {
             return null;
         }
         OptExpression mvPlan = plans.first;
+        OptimizerContext mvOptimizerContext = new OptimizerContext(null, columnRefFactory);
+        if (MVRewriteBoxingRule.getInstance().check(mvPlan, mvOptimizerContext)) {
+            List<OptExpression> boxingTree = MVRewriteBoxingRule.getInstance().transform(mvPlan, mvOptimizerContext);
+            Preconditions.checkState(boxingTree.size() == 1);
+            mvPlan = boxingTree.get(0);
+        }
         if (!MvUtils.isValidMVPlan(mvPlan)) {
             return new MvPlanContext();
         }

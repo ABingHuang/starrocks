@@ -176,7 +176,7 @@ public class Optimizer {
         memo.init(logicOperatorTree);
         OptimizerTraceUtil.log("after logical rewrite, root group:\n%s", memo.getRootGroup());
 
-        if (MVRewriteBoxingRule.getInstance().check(logicOperatorTree,, context)) {
+        if (MVRewriteBoxingRule.getInstance().check(logicOperatorTree, context)) {
             List<OptExpression> boxingTree = MVRewriteBoxingRule.getInstance().transform(logicOperatorTree, context);
             Preconditions.checkState(boxingTree.size() == 1);
             memo.copyIn(logicOperatorTree.getGroupExpression().getGroup(), boxingTree.get(0));

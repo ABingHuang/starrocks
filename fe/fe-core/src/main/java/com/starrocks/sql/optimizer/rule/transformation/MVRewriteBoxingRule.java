@@ -33,22 +33,22 @@ public class MVRewriteBoxingRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        return Lists.newArrayList(new MvBoxingShuttle().visit(input, null));
+        return Lists.newArrayList(new MvBoxingShuttle().visit(input, context));
     }
 
-    private static class MvBoxingShuttle extends OptExpressionVisitor<OptExpression, Void> {
+    private static class MvBoxingShuttle extends OptExpressionVisitor<OptExpression, OptimizerContext> {
         @Override
-        public OptExpression visitLogicalTableScan(OptExpression tableScan, Void context) {
+        public OptExpression visitLogicalTableScan(OptExpression tableScan, OptimizerContext context) {
             return tableScan;
         }
 
         @Override
-        public OptExpression visitLogicalAggregate(OptExpression agg, Void context) {
-            return MvUtils.isLogicalSPJG(agg) ? agg : createBoxExpression(agg);
+        public OptExpression visitLogicalAggregate(OptExpression agg, OptimizerContext context) {
+            return MvUtils.isLogicalSPJG(agg) ? agg : createBoxExpression(agg, context);
         }
 
         @Override
-        public OptExpression visitLogicalJoin(OptExpression join, Void context) {
+        public OptExpression visitLogicalJoin(OptExpression join, OptimizerContext context) {
             List<OptExpression> children = Lists.newArrayList();
             for (OptExpression child : join.getInputs()) {
                 children.add(visit(child, context));
@@ -59,33 +59,33 @@ public class MVRewriteBoxingRule extends TransformationRule {
             if (isLeftSPJ && isRightSPJ) {
                 return join;
             }
-            OptExpression left = isLeftSPJ ? children.get(0) : createBoxExpression(children.get(0));
-            OptExpression right = isRightSPJ ? children.get(1) : createBoxExpression(children.get(1));
+            OptExpression left = isLeftSPJ ? children.get(0) : createBoxExpression(children.get(0), context);
+            OptExpression right = isRightSPJ ? children.get(1) : createBoxExpression(children.get(1), context);
             return OptExpression.create(join.getOp(), left, right);
         }
 
         @Override
-        public OptExpression visitLogicalUnion(OptExpression union, Void context) {
-            return createBoxExpression(union);
+        public OptExpression visitLogicalUnion(OptExpression union, OptimizerContext context) {
+            return createBoxExpression(union, context);
         }
 
         @Override
-        public OptExpression visitLogicalExcept(OptExpression except, Void context) {
-            return createBoxExpression(except);
+        public OptExpression visitLogicalExcept(OptExpression except, OptimizerContext context) {
+            return createBoxExpression(except, context);
         }
 
         @Override
-        public OptExpression visitLogicalIntersect(OptExpression intersect, Void context) {
-            return createBoxExpression(intersect);
+        public OptExpression visitLogicalIntersect(OptExpression intersect, OptimizerContext context) {
+            return createBoxExpression(intersect, context);
         }
 
         @Override
-        public OptExpression visitLogicalWindow(OptExpression window, Void context) {
-            return createBoxExpression(window);
+        public OptExpression visitLogicalWindow(OptExpression window, OptimizerContext context) {
+            return createBoxExpression(window, context);
         }
 
-        private OptExpression createBoxExpression(OptExpression optExpression) {
-            return OptExpression.create(LogicalBoxOperator.create(optExpression));
+        private OptExpression createBoxExpression(OptExpression optExpression, OptimizerContext context) {
+            return OptExpression.create(LogicalBoxOperator.create(optExpression, context));
         }
     }
 }
