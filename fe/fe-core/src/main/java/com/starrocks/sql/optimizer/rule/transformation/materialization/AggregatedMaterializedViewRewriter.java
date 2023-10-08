@@ -552,7 +552,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         aggBuilder.setProjection(projection);
         LogicalAggregationOperator newAggOp = aggBuilder.build();
         OptExpression rewriteOp = OptExpression.create(newAggOp, mvOptExpr);
-        deriveLogicalProperty(rewriteOp);
+        MvUtils.deriveLogicalProperty(rewriteOp);
         return rewriteOp;
     }
 

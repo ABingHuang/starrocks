@@ -44,6 +44,7 @@ public class MaterializedViewOptimizer {
             List<OptExpression> boxingTree = MVRewriteBoxingRule.getInstance().transform(mvPlan, mvOptimizerContext);
             Preconditions.checkState(boxingTree.size() == 1);
             mvPlan = boxingTree.get(0);
+            MvUtils.deriveLogicalProperty(mvPlan);
         }
         if (!MvUtils.isValidMVPlan(mvPlan)) {
             return new MvPlanContext();

@@ -4564,4 +4564,38 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         PlanTestBase.assertContains(plan, "mv_on_hive_view_1");
         starRocksAssert.dropMaterializedView("mv_on_hive_view_1");
     }
+
+    @Test
+    public void testViewBasedMvRewrite() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        starRocksAssert.withView("create view agg_view_1" +
+                " as " +
+                " select c1, sum(c2) as total from t1 group by c1");
+
+    /*
+    starRocksAssert.withMaterializedView("create materialized view mv_view_1 " +
+            "DISTRIBUTED by hash(c_custkey) buckets 10" +
+            " properties (" +
+            "\"replication_num\" = \"1\",\n" +
+            "\"force_external_table_query_rewrite\" = \"TRUE\"\n" +
+            ")\n" +
+            "As select c5, c6, c1, total from t2 join agg_view_1 on c5 = c1");
+
+     */
+
+        /*
+        {
+            String mv = "select c5, c6, c1, total from t2 join agg_view_1 on c5 = c1";
+            String query = "select c5, c6, c1, total from t2 join agg_view_1 on c5 = c1";
+            testRewriteOK(mv, query);
+        }
+
+         */
+
+        {
+            String mv = "select c5, c6, c1, total from t2 join agg_view_1 on c5 = c1";
+            String query = "select c5, c6, c1, total from t2 join agg_view_1 on c5 = c1";
+            testRewriteOK(mv, query);
+        }
+    }
 }

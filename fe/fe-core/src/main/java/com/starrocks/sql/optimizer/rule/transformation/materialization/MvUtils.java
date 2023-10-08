@@ -56,6 +56,7 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -68,6 +69,7 @@ import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalBoxOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -1135,10 +1137,27 @@ public class MvUtils {
     }
 
     public static boolean isSupportViewDelta(OptExpression optExpression) {
-        return getAllJoinOperators(optExpression).stream().allMatch(x -> isSupportViewDelta(x));
+        return getAllJoinOperators(optExpression).stream().allMatch(x -> isSupportViewDelta(x)) && !hasBox(optExpression);
+    }
+
+    public static boolean hasBox(OptExpression optExpression) {
+        List<TableScanDesc> tableScanDescs = getTableScanDescs(optExpression);
+        return !tableScanDescs.stream().anyMatch(desc -> desc.getScanOperator() instanceof LogicalBoxOperator);
     }
 
     public static boolean isSupportViewDelta(JoinOperator joinOperator) {
         return  joinOperator.isLeftOuterJoin() || joinOperator.isInnerJoin();
+    }
+
+    public static void deriveLogicalProperty(OptExpression root) {
+        for (OptExpression child : root.getInputs()) {
+            deriveLogicalProperty(child);
+        }
+
+        if (root.getLogicalProperty() == null) {
+            ExpressionContext context = new ExpressionContext(root);
+            context.deriveLogicalProperty();
+            root.setLogicalProperty(context.getRootProperty());
+        }
     }
 }

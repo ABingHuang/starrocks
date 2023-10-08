@@ -55,6 +55,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalBoxOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
@@ -394,6 +395,12 @@ public class MaterializedViewRewriter {
                     new JoinDeriveContext(queryJoinType, mvJoinType, joinColumnRefs, compensatedEquivalenceColumns);
             mvRewriteContext.addJoinDeriveContext(joinDeriveContext);
             return true;
+        } else if (queryOp instanceof LogicalBoxOperator) {
+            Preconditions.checkState(mvOp instanceof LogicalBoxOperator);
+            LogicalBoxOperator queryBox = queryOp.cast();
+            LogicalBoxOperator mvBox = mvOp.cast();
+            // equivalent to expr
+            return false;
         } else if (queryOp instanceof LogicalScanOperator) {
             Preconditions.checkState(mvOp instanceof LogicalScanOperator);
             Table queryTable = ((LogicalScanOperator) queryOp).getTable();
@@ -633,7 +640,18 @@ public class MaterializedViewRewriter {
         final List<Table> queryTables = mvRewriteContext.getQueryTables();
         final List<Table> mvTables = MvUtils.getAllTables(mvExpression);
 
-        MatchMode matchMode = getMatchMode(queryTables, mvTables);
+        MatchMode matchMode;
+        if (MvUtils.hasBox(queryExpression) != MvUtils.hasBox(mvExpression)) {
+            return null;
+        } else if (MvUtils.hasBox(queryExpression)) {
+            // Check whether mv can be applicable for the query.
+            if (!computeCompatibility(queryExpression, mvExpression)) {
+                return null;
+            }
+            matchMode = MatchMode.COMPLETE;
+        } else {
+            matchMode = getMatchMode(queryTables, mvTables);
+        }
 
         // Check whether mv can be applicable for the query.
         if (!isMVApplicable(mvExpression, queryTables, mvTables, matchMode, queryExpression)) {
@@ -1201,7 +1219,7 @@ public class MaterializedViewRewriter {
             mvRewriteContext.setMvPruneConjunct(MvUtils.canonizePredicate(rewrittenPrunePredicate));
         }
         OptExpression mvScanOptExpression = OptExpression.create(mvScanBuilder.build());
-        deriveLogicalProperty(mvScanOptExpression);
+        MvUtils.deriveLogicalProperty(mvScanOptExpression);
         return mvScanOptExpression;
     }
 
@@ -1250,7 +1268,7 @@ public class MaterializedViewRewriter {
                 newScanOpBuilder.setPredicate(normalizedPredicate);
                 mvScanOptExpression = OptExpression.create(newScanOpBuilder.build());
                 mvScanOptExpression.setLogicalProperty(null);
-                deriveLogicalProperty(mvScanOptExpression);
+                MvUtils.deriveLogicalProperty(mvScanOptExpression);
             }
 
             // add projection
@@ -1677,10 +1695,10 @@ public class MaterializedViewRewriter {
             }
 
             OptExpression newQueryExpr = pushdownPredicatesForJoin(queryExpression, queryCompensationPredicate);
-            deriveLogicalProperty(newQueryExpr);
+            MvUtils.deriveLogicalProperty(newQueryExpr);
             if (mvRewriteContext.getEnforcedColumns() != null && !mvRewriteContext.getEnforcedColumns().isEmpty()) {
                 newQueryExpr = pruneEnforcedColumns(newQueryExpr);
-                deriveLogicalProperty(newQueryExpr);
+                MvUtils.deriveLogicalProperty(newQueryExpr);
             }
             return newQueryExpr;
 
@@ -1924,7 +1942,7 @@ public class MaterializedViewRewriter {
                 .isUnionAll(true)
                 .build();
         OptExpression result = OptExpression.create(unionOperator, newQueryInput, viewInput);
-        deriveLogicalProperty(result);
+        MvUtils.deriveLogicalProperty(result);
         return result;
     }
 
@@ -2078,18 +2096,6 @@ public class MaterializedViewRewriter {
             matchMode = MatchMode.VIEW_DELTA;
         }
         return matchMode;
-    }
-
-    protected void deriveLogicalProperty(OptExpression root) {
-        for (OptExpression child : root.getInputs()) {
-            deriveLogicalProperty(child);
-        }
-
-        if (root.getLogicalProperty() == null) {
-            ExpressionContext context = new ExpressionContext(root);
-            context.deriveLogicalProperty();
-            root.setLogicalProperty(context.getRootProperty());
-        }
     }
 
     // TODO: consider no-loss type cast

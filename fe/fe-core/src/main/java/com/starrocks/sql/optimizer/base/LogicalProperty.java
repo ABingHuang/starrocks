@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalBoxOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
@@ -164,6 +165,11 @@ public class LogicalProperty implements Property {
         @Override
         public OneTabletProperty visitMockOperator(MockOperator node, ExpressionContext context) {
             return OneTabletProperty.supportWithoutChangeDistribution(new ColumnRefSet());
+        }
+
+        @Override
+        public OneTabletProperty visitLogicalBox(LogicalBoxOperator node, ExpressionContext context) {
+            return OneTabletProperty.notSupport();
         }
 
         @Override

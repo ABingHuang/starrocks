@@ -14,8 +14,11 @@
 
 package com.starrocks.sql.optimizer.operator;
 
+import com.starrocks.sql.optimizer.ExpressionContext;
+import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalBoxOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
@@ -112,6 +115,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitLogicalOlapScan(LogicalOlapScanOperator node, C context) {
+        return visitLogicalTableScan(node, context);
+    }
+
+    public R visitLogicalBox(LogicalBoxOperator node, C context) {
         return visitLogicalTableScan(node, context);
     }
 

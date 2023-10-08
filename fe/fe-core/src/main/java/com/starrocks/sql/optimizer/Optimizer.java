@@ -179,7 +179,7 @@ public class Optimizer {
         if (MVRewriteBoxingRule.getInstance().check(logicOperatorTree, context)) {
             List<OptExpression> boxingTree = MVRewriteBoxingRule.getInstance().transform(logicOperatorTree, context);
             Preconditions.checkState(boxingTree.size() == 1);
-            memo.copyIn(logicOperatorTree.getGroupExpression().getGroup(), boxingTree.get(0));
+            memo.copyIn(memo.getRootGroup(), boxingTree.get(0));
         }
 
         // collect all olap scan operator
@@ -412,7 +412,7 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, SplitScanORToUnionRule.getInstance());
 
         // only apply for mv, not for query
-        ruleRewriteOnlyOnce(tree, rootTaskContext, MVRewriteBoxingRule.getInstance());
+        // ruleRewriteOnlyOnce(tree, rootTaskContext, MVRewriteBoxingRule.getInstance());
 
         if (isEnableSingleTableMVRewrite(rootTaskContext, sessionVariable, tree)) {
             // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization

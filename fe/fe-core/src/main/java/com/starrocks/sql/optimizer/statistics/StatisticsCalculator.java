@@ -53,6 +53,7 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalBoxOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
@@ -143,6 +144,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.statistics.ColumnStatistic.buildFrom;
+import static java.lang.Double.POSITIVE_INFINITY;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 
@@ -228,6 +230,21 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     public Void visitLogicalBinlogScan(LogicalBinlogScanOperator node, ExpressionContext context) {
         return computeOlapScanNode(node, context, node.getTable(), new ArrayList<>(),
                 node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitLogicalBox(LogicalBoxOperator node, ExpressionContext context) {
+        Statistics.Builder builder = Statistics.builder();
+        List<ColumnRefOperator> requiredColumnRefs = Lists.newArrayList(node.getColRefToColumnMetaMap().keySet());
+        for (int i = 0; i < requiredColumnRefs.size(); ++i) {
+            builder.addColumnStatistic(requiredColumnRefs.get(i), ColumnStatistic.unknown());
+        }
+        // set output row count to max to make optimizer skip this plan
+        builder.setOutputRowCount(POSITIVE_INFINITY);
+        builder.setTableRowCountMayInaccurate(true);
+        // 4. estimate cardinality
+        context.setStatistics(builder.build());
+        return visitOperator(node, context);
     }
 
     @Override

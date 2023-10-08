@@ -124,7 +124,7 @@ public class QueryDumpInfo implements DumpInfo {
                 // NOTE: Since materialized view support unique/foreign constraints, we use `optimize` here to visit
                 // all dependent tables again to add it into `dump info`.
                 // NOTE: The optimizer should not contain self to avoid stack overflow.
-                mvOptimizer.optimize((MaterializedView) table, connectContext, optimizerConfig);
+                // mvOptimizer.optimize((MaterializedView) table, connectContext, optimizerConfig);
                 tableMap.put(table.getId(), new Pair<>(dbName, table));
             }
             connectContext.getSessionVariable().setQueryExcludingMVNames(queryExcludingMVNames);

@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.List;
@@ -57,6 +58,15 @@ public class LogicalBoxOperator extends LogicalScanOperator {
         builder.setEqualLogicalPlan(equalLogicalPlan);
         // should we care about table?
         return builder.build();
+    }
+
+    public OptExpression getEqualLogicalPlan() {
+        return equalLogicalPlan;
+    }
+
+    @Override
+    public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
+        return visitor.visitLogicalBox(this, context);
     }
 
     public static Builder builder() {

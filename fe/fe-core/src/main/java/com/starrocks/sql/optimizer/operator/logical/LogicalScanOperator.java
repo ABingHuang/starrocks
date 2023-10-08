@@ -164,7 +164,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     @Override
     public String toString() {
         return "LogicalScanOperator" + " {" +
-                "table='" + table.getId() + '\'' +
+                "table='" + (table == null ? String.valueOf(0) : table.getId()) + '\'' +
                 ", outputColumns='" + new ArrayList<>(colRefToColumnMetaMap.keySet()) + '\'' +
                 '}';
     }
@@ -199,7 +199,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), table.getId(), colRefToColumnMetaMap.keySet());
+        return Objects.hash(super.hashCode(), table == null ? 0 : table.getId(), colRefToColumnMetaMap.keySet());
     }
 
     public abstract static class Builder<O extends LogicalScanOperator, B extends LogicalScanOperator.Builder>
