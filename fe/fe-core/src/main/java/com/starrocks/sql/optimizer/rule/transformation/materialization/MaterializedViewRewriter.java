@@ -42,7 +42,6 @@ import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.sql.common.PermutationGenerator;
-import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -400,7 +399,7 @@ public class MaterializedViewRewriter {
             LogicalBoxOperator queryBox = queryOp.cast();
             LogicalBoxOperator mvBox = mvOp.cast();
             // equivalent to expr
-            return false;
+            return BoxEquivalenceChecker.getInstance().check(queryBox, mvBox);
         } else if (queryOp instanceof LogicalScanOperator) {
             Preconditions.checkState(mvOp instanceof LogicalScanOperator);
             Table queryTable = ((LogicalScanOperator) queryOp).getTable();
