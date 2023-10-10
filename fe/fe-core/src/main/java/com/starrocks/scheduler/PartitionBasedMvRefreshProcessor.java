@@ -661,7 +661,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     private void syncPartitionsForExpr(TaskRunContext context) {
-        Expr partitionExpr = MaterializedView.getPartitionExpr(materializedView);
+        ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo) materializedView.getPartitionInfo();
+        Expr partitionExpr = exprPartitionInfo.getPartitionExprs().get(0);
         Table refBaseTable = mvContext.getRefBaseTable();
         Column refBaseTablePartitionColumn = mvContext.getRefBaseTablePartitionColumn();
 
@@ -1071,8 +1072,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 Expr partitionPredicates = generatePartitionPredicate(tablePartitionNames, queryStatement,
                         materializedView.getPartitionInfo());
                 if (partitionPredicates != null) {
-                    LOG.info("Generate ref base table {} partition predicate {}", tableRelation.getName(),
-                            partitionPredicates);
                     List<SlotRef> slots = Lists.newArrayList();
                     partitionPredicates.collect(SlotRef.class, slots);
 
