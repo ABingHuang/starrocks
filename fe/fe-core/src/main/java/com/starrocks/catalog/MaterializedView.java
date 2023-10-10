@@ -551,6 +551,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     public Expr getFirstPartitionRefTableExpr() {
+        if (partitionRefTableExprs.get(0).getType() == Type.INVALID) {
+            partitionRefTableExprs.get(0).setType(MaterializedView.getPartitionExpr(this).getType());
+            partitionRefTableExprs.get(0).setFn(MaterializedView.getPartitionExpr(this).getFn());
+        }
         return partitionRefTableExprs.get(0);
     }
 
@@ -562,7 +566,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 ((ExpressionRangePartitionInfo) materializedView.getPartitionInfo());
         // currently, mv only supports one expression
         Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
-        return materializedView.getPartitionRefTableExprs().get(0);
+        return expressionRangePartitionInfo.getPartitionExprs().get(0);
     }
 
     /**

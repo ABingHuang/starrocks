@@ -661,8 +661,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     private void syncPartitionsForExpr(TaskRunContext context) {
-        ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo) materializedView.getPartitionInfo();
-        Expr partitionExpr = exprPartitionInfo.getPartitionExprs().get(0);
+        Expr partitionExpr = materializedView.getFirstPartitionRefTableExpr();
         Table refBaseTable = mvContext.getRefBaseTable();
         Column refBaseTablePartitionColumn = mvContext.getRefBaseTablePartitionColumn();
 
