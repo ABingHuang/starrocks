@@ -132,9 +132,23 @@ public class SyncPartitionUtils {
             String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
             rollupRange = mappingRangeList(baseRangeMap, granularity, partitionColumnType);
         } else if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
-            rollupRange = baseRangeMap;
+            rollupRange = mappingRangeListForStrDate(baseRangeMap);
         }
         return getRangePartitionDiff(baseRangeMap, mvRangeMap, rollupRange, rangeToInclude);
+    }
+
+    // just change the partition name
+    private static Map<String, Range<PartitionKey>> mappingRangeListForStrDate(
+            Map<String, Range<PartitionKey>> baseRangeMap) {
+        Map<String, Range<PartitionKey>> result = Maps.newHashMap();
+        for (Map.Entry<String, Range<PartitionKey>> rangeEntry : baseRangeMap.entrySet()) {
+            Range<PartitionKey> dateRange = rangeEntry.getValue();
+            DateLiteral lowerDate = (DateLiteral) dateRange.lowerEndpoint().getKeys().get(0);
+            DateLiteral upperDate = (DateLiteral) dateRange.upperEndpoint().getKeys().get(0);
+            String mvPartitionName = getMVPartitionName(lowerDate.toLocalDateTime(), upperDate.toLocalDateTime());
+            result.put(mvPartitionName, dateRange);
+        }
+        return result;
     }
 
     public static RangePartitionDiff getRangePartitionDiffOfExpr(Map<String, Range<PartitionKey>> baseRangeMap,
