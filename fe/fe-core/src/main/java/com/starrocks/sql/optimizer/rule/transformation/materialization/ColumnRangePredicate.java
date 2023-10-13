@@ -182,17 +182,23 @@ public class ColumnRangePredicate extends RangePredicate {
             return false;
         }
         ColumnRangePredicate columnRangePredicate = other.cast();
-        boolean isEnclosed = canonicalColumnRanges.enclosesAll(columnRangePredicate.canonicalColumnRanges);
-        if (isEnclosed) {
-            return true;
-        }
-        // is equivalences enclosed
-        List<ColumnRangePredicate> equivalences = getEquivalentRangePredicates();
-        List<ColumnRangePredicate> otherEquivalences = columnRangePredicate.getEquivalentRangePredicates();
-        if (equivalences.isEmpty() || otherEquivalences.isEmpty()) {
+        if (expression.equals(columnRangePredicate.getExpression())) {
+            return canonicalColumnRanges.enclosesAll(columnRangePredicate.canonicalColumnRanges);
+        } else {
+            // is equivalences enclosed
+            List<ColumnRangePredicate> equivalences = getEquivalentRangePredicates();
+            List<ColumnRangePredicate> otherEquivalences = columnRangePredicate.getEquivalentRangePredicates();
+            if (!equivalences.isEmpty()) {
+                if (equivalences.stream().anyMatch(e -> e.enclose(columnRangePredicate))) {
+                    return true;
+                }
+            } else if (!otherEquivalences.isEmpty()) {
+                if (otherEquivalences.stream().anyMatch(o -> columnRangePredicate.enclose(o))) {
+                    return true;
+                }
+            }
             return false;
         }
-        return equivalences.stream().anyMatch(e -> otherEquivalences.stream().anyMatch(o -> e.enclose(o)));
     }
 
     @Override
@@ -241,17 +247,20 @@ public class ColumnRangePredicate extends RangePredicate {
         }
         if (other instanceof ColumnRangePredicate) {
             ColumnRangePredicate otherColumnRangePredicate = (ColumnRangePredicate) other;
-            if (!expression.equals(otherColumnRangePredicate.expression)) {
-                return null;
-            }
             /*
-            if (!columnRef.equals(otherColumnRangePredicate.getColumnRef())) {
+            if (!expression.equals(otherColumnRangePredicate.expression)) {
                 return null;
             }
 
              */
-            if (columnRanges.equals(otherColumnRangePredicate.columnRanges)
-                    || canonicalColumnRanges.equals(otherColumnRangePredicate.canonicalColumnRanges)) {
+
+            if (!columnRef.equals(otherColumnRangePredicate.getColumnRef())) {
+                return null;
+            }
+
+            if (expression.equals(otherColumnRangePredicate.expression) &&
+                    (columnRanges.equals(otherColumnRangePredicate.columnRanges)
+                    || canonicalColumnRanges.equals(otherColumnRangePredicate.canonicalColumnRanges))) {
                 return ConstantOperator.TRUE;
             } else {
                 if (other.enclose(this)) {
