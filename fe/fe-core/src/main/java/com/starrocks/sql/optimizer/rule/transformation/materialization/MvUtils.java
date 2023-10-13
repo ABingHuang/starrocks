@@ -959,8 +959,8 @@ public class MvUtils {
             } else if (scanOperator instanceof LogicalHiveScanOperator) {
                 partitionPredicate = compensatePartitionPredicateForHiveScan((LogicalHiveScanOperator) scanOperator);
             } else if (scanOperator instanceof LogicalIcebergScanOperator) {
-                /*
                 Statistics icebergStatics = getStatistics(scanOptExpression, context);
+                /*
                 partitionPredicate = compensatePartitionPredicateForIceberg(icebergStatics,
                         (LogicalIcebergScanOperator) scanOperator);
 
