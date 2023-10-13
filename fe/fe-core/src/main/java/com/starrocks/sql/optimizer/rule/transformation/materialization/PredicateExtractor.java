@@ -202,7 +202,7 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
                 return false;
             }
             ColumnRangePredicate columnRangePredicate = rangePredicate.cast();
-            return columnRangePredicate.getColumnRef().equals(toFind.getColumnRef());
+            return columnRangePredicate.getExpression().equals(toFind.getExpression());
         }).findFirst();
         return rangePredicateOptional;
     }
