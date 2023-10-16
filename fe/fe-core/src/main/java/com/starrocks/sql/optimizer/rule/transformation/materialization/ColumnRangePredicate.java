@@ -182,23 +182,10 @@ public class ColumnRangePredicate extends RangePredicate {
             return false;
         }
         ColumnRangePredicate columnRangePredicate = other.cast();
-        if (expression.equals(columnRangePredicate.getExpression())) {
-            return canonicalColumnRanges.enclosesAll(columnRangePredicate.canonicalColumnRanges);
-        } else {
-            // is equivalences enclosed
-            List<ColumnRangePredicate> equivalences = getEquivalentRangePredicates();
-            List<ColumnRangePredicate> otherEquivalences = columnRangePredicate.getEquivalentRangePredicates();
-            if (!equivalences.isEmpty()) {
-                if (equivalences.stream().anyMatch(e -> e.enclose(columnRangePredicate))) {
-                    return true;
-                }
-            } else if (!otherEquivalences.isEmpty()) {
-                if (otherEquivalences.stream().anyMatch(o -> columnRangePredicate.enclose(o))) {
-                    return true;
-                }
-            }
+        if (!expression.equals(columnRangePredicate.getExpression())) {
             return false;
         }
+        return canonicalColumnRanges.enclosesAll(columnRangePredicate.canonicalColumnRanges);
     }
 
     @Override
@@ -247,12 +234,6 @@ public class ColumnRangePredicate extends RangePredicate {
         }
         if (other instanceof ColumnRangePredicate) {
             ColumnRangePredicate otherColumnRangePredicate = (ColumnRangePredicate) other;
-            /*
-            if (!expression.equals(otherColumnRangePredicate.expression)) {
-                return null;
-            }
-
-             */
 
             if (!columnRef.equals(otherColumnRangePredicate.getColumnRef())) {
                 return null;
@@ -265,6 +246,22 @@ public class ColumnRangePredicate extends RangePredicate {
             } else {
                 if (other.enclose(this)) {
                     return toScalarOperator();
+                } else {
+                    // is equivalences enclosed
+                    List<ColumnRangePredicate> equivalences = getEquivalentRangePredicates();
+                    for (ColumnRangePredicate equi : equivalences) {
+                        ScalarOperator candidate = equi.simplify(other);
+                        if (candidate != null) {
+                            return candidate;
+                        }
+                    }
+                    List<ColumnRangePredicate> otherEquivalences = otherColumnRangePredicate.getEquivalentRangePredicates();
+                    for (ColumnRangePredicate equi : otherEquivalences) {
+                        ScalarOperator candidate = this.simplify(equi);
+                        if (candidate != null) {
+                            return candidate;
+                        }
+                    }
                 }
                 return null;
             }
