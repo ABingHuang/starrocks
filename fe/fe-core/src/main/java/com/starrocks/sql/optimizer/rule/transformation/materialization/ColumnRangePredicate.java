@@ -172,7 +172,7 @@ public class ColumnRangePredicate extends RangePredicate {
                     from.upperEndpoint().getDate().toLocalDate().toString(), Type.VARCHAR),
                     from.upperBoundType());
         } else if (from.hasLowerBound()) {
-            Range.downTo(ConstantOperator.createChar(
+            return Range.downTo(ConstantOperator.createChar(
                     from.lowerEndpoint().getDate().toLocalDate().toString(), Type.VARCHAR),
                     from.lowerBoundType());
         }
