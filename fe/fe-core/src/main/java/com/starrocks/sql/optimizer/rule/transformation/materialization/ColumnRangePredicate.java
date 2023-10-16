@@ -162,15 +162,18 @@ public class ColumnRangePredicate extends RangePredicate {
 
     private Range<ConstantOperator> convertRange(Range<ConstantOperator> from) {
         if (from.hasLowerBound() && from.hasUpperBound()) {
-            return Range.range(ConstantOperator.createChar(from.lowerEndpoint().getDate().toString(), Type.VARCHAR),
+            return Range.range(ConstantOperator.createChar(
+                    from.lowerEndpoint().getDate().toLocalDate().toString(), Type.VARCHAR),
                     from.lowerBoundType(),
-                    ConstantOperator.createChar(from.upperEndpoint().getDate().toString(), Type.VARCHAR),
+                    ConstantOperator.createChar(from.upperEndpoint().getDate().toLocalDate().toString(), Type.VARCHAR),
                     from.upperBoundType());
         } else if (from.hasUpperBound()) {
-            return Range.upTo(ConstantOperator.createChar(from.upperEndpoint().getDate().toString(), Type.VARCHAR),
+            return Range.upTo(ConstantOperator.createChar(
+                    from.upperEndpoint().getDate().toLocalDate().toString(), Type.VARCHAR),
                     from.upperBoundType());
         } else if (from.hasLowerBound()) {
-            Range.downTo(ConstantOperator.createChar(from.upperEndpoint().getDate().toString(), Type.VARCHAR),
+            Range.downTo(ConstantOperator.createChar(
+                    from.upperEndpoint().getDate().toLocalDate().toString(), Type.VARCHAR),
                     from.lowerBoundType());
         }
         return Range.all();
