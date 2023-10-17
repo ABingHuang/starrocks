@@ -1556,19 +1556,28 @@ public class MaterializedViewRewriter {
             OptExpression query,
             ColumnRefFactory queryRefFactory,
             List<ScalarOperator> predicatesToEnforce) {
+        if (predicatesToEnforce.isEmpty()) {
+            return new Pair<>(null, query);
+        }
+
+        OptExpression newQuery = enforcePredicateToScan(query, predicatesToEnforce);
+        if (predicatesToEnforce.isEmpty()) {
+            return new Pair<>(null, newQuery);
+        }
+
         List<ColumnRefOperator> columns = Lists.newArrayList();
         for (ScalarOperator predicate : predicatesToEnforce) {
             predicate.getColumnRefs(columns);
         }
-        // check every columns to enforce should be in the Scan Operator
+        Set<ColumnRefOperator> columnSetToEnforce = Sets.newHashSet(columns);
+        // check every columns to enforce should be in the Scan Operators
         for (ColumnRefOperator column : columns) {
             if (queryRefFactory.getRelationId(column.getId()) == -1) {
                 return null;
             }
         }
-        ColumnEnforcer columnEnforcer = new ColumnEnforcer(query, columns);
-        OptExpression newQuery = columnEnforcer.enforce();
-        mvRewriteContext.setEnforcedColumns(columnEnforcer.getEnforcedColumns());
+        ColumnEnforcer columnEnforcer = new ColumnEnforcer(query, columnSetToEnforce);
+        newQuery = columnEnforcer.enforce();
 
         final List<LogicalScanOperator> queryScanOps = MvUtils.getScanOperator(newQuery);
         final List<ColumnRefOperator> queryScanOutputColRefs = queryScanOps.stream()
@@ -1587,9 +1596,15 @@ public class MaterializedViewRewriter {
         if (newPredicate == null) {
             return null;
         }
+        mvRewriteContext.setEnforcedColumns(columnEnforcer.getEnforcedColumns());
         return new Pair<>(newPredicate, newQuery);
     }
 
+    // if all columns used by one predicate come from the same scan operator, directly push it into the scan
+    private OptExpression enforcePredicateToScan(OptExpression query, List<ScalarOperator> predicatesToEnforce) {
+        PredicateToScanEnforcer predicateToScanEnforcer = new PredicateToScanEnforcer(query);
+        return predicateToScanEnforcer.enforce(predicatesToEnforce);
+    }
 
     private ScalarOperator rewriteScalarOperatorToTarget(
             ScalarOperator predicate,
