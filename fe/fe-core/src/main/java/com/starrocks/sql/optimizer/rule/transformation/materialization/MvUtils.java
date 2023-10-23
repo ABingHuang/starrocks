@@ -425,7 +425,7 @@ public class MvUtils {
             @Override
             public Void visit(OptExpression optExpression, Void context) {
                 for (OptExpression input : optExpression.getInputs()) {
-                    super.visit(input, context);
+                    input.getOp().accept(this, input, null);
                 }
                 return null;
             }
@@ -433,6 +433,9 @@ public class MvUtils {
             @Override
             public Void visitLogicalJoin(OptExpression optExpression, Void context) {
                 joinExprs.add(optExpression);
+                for (OptExpression input : optExpression.getInputs()) {
+                    input.getOp().accept(this, input, null);
+                }
                 return null;
             }
         };
