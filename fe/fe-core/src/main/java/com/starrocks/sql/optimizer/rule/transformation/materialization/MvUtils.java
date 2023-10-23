@@ -419,6 +419,27 @@ public class MvUtils {
         return scanExprs;
     }
 
+    public static List<OptExpression> collectJoinExpr(OptExpression expression) {
+        List<OptExpression> joinExprs = Lists.newArrayList();
+        OptExpressionVisitor joinCollector = new OptExpressionVisitor<Void, Void>() {
+            @Override
+            public Void visit(OptExpression optExpression, Void context) {
+                for (OptExpression input : optExpression.getInputs()) {
+                    super.visit(input, context);
+                }
+                return null;
+            }
+
+            @Override
+            public Void visitLogicalJoin(OptExpression optExpression, Void context) {
+                joinExprs.add(optExpression);
+                return null;
+            }
+        };
+        expression.getOp().accept(joinCollector, expression, null);
+        return joinExprs;
+    }
+
     // get all predicates within and below root
     public static List<ScalarOperator> getAllValidPredicates(OptExpression root) {
         List<ScalarOperator> predicates = Lists.newArrayList();

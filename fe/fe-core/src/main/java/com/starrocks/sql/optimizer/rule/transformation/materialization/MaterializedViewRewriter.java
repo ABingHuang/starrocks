@@ -1001,12 +1001,15 @@ public class MaterializedViewRewriter {
             TableScanDesc parentTableScanDesc, TableScanDesc tableScanDesc,
             List<Pair<String, String>> columnPairs, List<String> childKeys, List<String> parentKeys,
             Multimap<ColumnRefOperator, ColumnRefOperator> constraintCompensationJoinColumns,
-            MaterializedView materializedView) {
+            MaterializedView materializedView, OptExpression mvExpression) {
         Table parentTable = parentTableScanDesc.getTable();
         Table childTable = tableScanDesc.getTable();
-        OptExpression joinOptExpr = parentTableScanDesc.getJoinOptExpression();
-        Preconditions.checkNotNull(joinOptExpr);
-        LogicalJoinOperator joinOperator = joinOptExpr.getOp().cast();
+        Optional<LogicalJoinOperator> joinOperatorOptional =
+                findJoin(parentTableScanDesc, tableScanDesc, columnPairs, mvExpression);
+        if (!joinOperatorOptional.isPresent()) {
+            return false;
+        }
+        LogicalJoinOperator joinOperator = joinOperatorOptional.get().cast();
         JoinOperator parentJoinType = joinOperator.getJoinType();
         if (parentJoinType.isInnerJoin()) {
             // to check:
@@ -1040,7 +1043,7 @@ public class MaterializedViewRewriter {
             if (childColumn == null || parentColumn == null) {
                 return false;
             }
-            if (!isJoinOnCondition(joinOptExpr, childColumn, parentColumn)) {
+            if (!isJoinOnCondition(joinOperator, childColumn, parentColumn)) {
                 return false;
             }
             constraintCompensationJoinColumns.put(parentColumn, childColumn);
@@ -1048,11 +1051,34 @@ public class MaterializedViewRewriter {
         return true;
     }
 
+    private Optional<LogicalJoinOperator> findJoin(
+            TableScanDesc parentTableScanDesc, TableScanDesc tableScanDesc,
+            List<Pair<String, String>> columnPairs, OptExpression mvExpression) {
+        List<OptExpression> joins = MvUtils.collectJoinExpr(mvExpression);
+        for (OptExpression joinOptExpr : joins) {
+            boolean allMatched = true;
+            for (Pair<String, String> pair : columnPairs) {
+                ColumnRefOperator childColumn = getColumnRef(pair.first, tableScanDesc.getScanOperator());
+                ColumnRefOperator parentColumn = getColumnRef(pair.second, parentTableScanDesc.getScanOperator());
+                if (childColumn == null || parentColumn == null) {
+                    return Optional.empty();
+                }
+                if (!isJoinOnCondition(joinOptExpr.getOp().cast(), childColumn, parentColumn)) {
+                    allMatched = false;
+                    break;
+                }
+            }
+            if (allMatched) {
+                return Optional.of(joinOptExpr.getOp().cast());
+            }
+        }
+        return Optional.empty();
+    }
+
     private boolean isJoinOnCondition(
-            OptExpression joinExpr,
+            LogicalJoinOperator joinOperator,
             ColumnRefOperator childColumn,
             ColumnRefOperator parentColumn) {
-        LogicalJoinOperator joinOperator = joinExpr.getOp().cast();
         List<ScalarOperator> onConjuncts = Utils.extractConjuncts(joinOperator.getOnPredicate());
         List<ScalarOperator> binaryConjuncts =
                 onConjuncts.stream().filter(ScalarOperator::isColumnEqualBinaryPredicate).collect(Collectors.toList());
