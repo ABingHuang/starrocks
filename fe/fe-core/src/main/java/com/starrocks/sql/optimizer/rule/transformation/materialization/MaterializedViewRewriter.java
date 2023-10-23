@@ -932,7 +932,7 @@ public class MaterializedViewRewriter {
 
                     Multimap<ColumnRefOperator, ColumnRefOperator> constraintCompensationJoinColumns = ArrayListMultimap.create();
                     if (!extraJoinCheck(mvParentTableScanDesc, mvTableScanDesc, columnPairs, childKeys, parentKeys,
-                            constraintCompensationJoinColumns, materializedView)) {
+                            constraintCompensationJoinColumns, materializedView, materializationContext.getMvExpression())) {
                         continue;
                     }
 
