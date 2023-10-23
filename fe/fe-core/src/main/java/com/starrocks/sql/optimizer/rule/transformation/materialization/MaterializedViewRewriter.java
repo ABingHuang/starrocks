@@ -887,7 +887,7 @@ public class MaterializedViewRewriter {
 
         // add edges to directed graph by FK-UK
         for (TableScanDesc mvTableScanDesc : mvGraph.nodes()) {
-            Table mvChildTable = mvTableScanDesc.getTable();
+             Table mvChildTable = mvTableScanDesc.getTable();
             List<ForeignKeyConstraint> foreignKeyConstraints = mvChildTable.getForeignKeyConstraints();
             List<ForeignKeyConstraint> mvForeignKeyConstraints = Lists.newArrayList();
             if (materializedView.getForeignKeyConstraints() != null) {
@@ -1004,12 +1004,13 @@ public class MaterializedViewRewriter {
             MaterializedView materializedView, OptExpression mvExpression) {
         Table parentTable = parentTableScanDesc.getTable();
         Table childTable = tableScanDesc.getTable();
-        Optional<LogicalJoinOperator> joinOperatorOptional =
+        Optional<OptExpression> joinOperatorOptional =
                 findJoin(parentTableScanDesc, tableScanDesc, columnPairs, mvExpression);
         if (!joinOperatorOptional.isPresent()) {
             return false;
         }
-        LogicalJoinOperator joinOperator = joinOperatorOptional.get().cast();
+        parentTableScanDesc.setJoinOptExpression(joinOperatorOptional.get());
+        LogicalJoinOperator joinOperator = joinOperatorOptional.get().getOp().cast();
         JoinOperator parentJoinType = joinOperator.getJoinType();
         if (parentJoinType.isInnerJoin()) {
             // to check:
@@ -1043,15 +1044,12 @@ public class MaterializedViewRewriter {
             if (childColumn == null || parentColumn == null) {
                 return false;
             }
-            if (!isJoinOnCondition(joinOperator, childColumn, parentColumn)) {
-                return false;
-            }
             constraintCompensationJoinColumns.put(parentColumn, childColumn);
         }
         return true;
     }
 
-    private Optional<LogicalJoinOperator> findJoin(
+    private Optional<OptExpression> findJoin(
             TableScanDesc parentTableScanDesc, TableScanDesc tableScanDesc,
             List<Pair<String, String>> columnPairs, OptExpression mvExpression) {
         List<OptExpression> joins = MvUtils.collectJoinExpr(mvExpression);
@@ -1069,7 +1067,7 @@ public class MaterializedViewRewriter {
                 }
             }
             if (allMatched) {
-                return Optional.of(joinOptExpr.getOp().cast());
+                return Optional.of(joinOptExpr);
             }
         }
         return Optional.empty();

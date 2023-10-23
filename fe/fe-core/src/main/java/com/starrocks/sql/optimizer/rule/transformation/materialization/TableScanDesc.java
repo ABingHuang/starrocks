@@ -29,7 +29,7 @@ public class TableScanDesc {
     private final int index;
     private final LogicalScanOperator scanOperator;
     // join type of LogicalJoinOperator above scan operator
-    private final OptExpression joinOptExpression;
+    private OptExpression joinOptExpression;
     private final boolean isLeft;
 
     public TableScanDesc(Table table, int index,
@@ -52,6 +52,10 @@ public class TableScanDesc {
 
     public OptExpression getJoinOptExpression() {
         return joinOptExpression;
+    }
+
+    public void setJoinOptExpression(OptExpression joinOptExpression) {
+        this.joinOptExpression = joinOptExpression;
     }
 
     public String getName() {
