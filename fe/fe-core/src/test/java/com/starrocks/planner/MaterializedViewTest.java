@@ -4576,4 +4576,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         PlanTestBase.assertContains(plan, "mv_on_hive_view_1");
         starRocksAssert.dropMaterializedView("mv_on_hive_view_1");
     }
+
+    @Test
+    public void testViewDeltaJoinOnSubquery() {
+        // test bushy join view delta join rewrite
+    }
 }

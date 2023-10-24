@@ -930,17 +930,21 @@ public class MaterializedViewRewriter {
                         continue;
                     }
 
-                    Multimap<ColumnRefOperator, ColumnRefOperator> constraintCompensationJoinColumns = ArrayListMultimap.create();
-                    if (!extraJoinCheck(mvParentTableScanDesc, mvTableScanDesc, columnPairs, childKeys, parentKeys,
-                            constraintCompensationJoinColumns, materializedView, materializationContext.getMvExpression())) {
+                    Multimap<ColumnRefOperator, ColumnRefOperator> constraintCompensationJoinColumns
+                            = ArrayListMultimap.create();
+                    OptExpression extraJoin = null;
+                    if (!extraJoinCheck(mvParentTableScanDesc, mvTableScanDesc, columnPairs, childKeys,
+                            parentKeys, constraintCompensationJoinColumns, materializedView,
+                            materializationContext.getMvExpression(), extraJoin)) {
                         continue;
                     }
 
                     // If `mvParentTableScanDesc` is not included in query's plan, add it
                     // to extraColumns.
-                    JoinOperator joinOperator = mvParentTableScanDesc.getJoinType();
+                    LogicalJoinOperator joinOperator = extraJoin.getOp().cast();
+                    JoinOperator joinType = joinOperator.getJoinType();
                     if (mvExtraTableScanDescs.contains(mvParentTableScanDesc)) {
-                        if (joinOperator.isInnerJoin() || joinOperator.isCrossJoin() || joinOperator.isSemiJoin()) {
+                        if (joinType.isInnerJoin() || joinType.isCrossJoin() || joinType.isSemiJoin()) {
                             compensationJoinColumns.putAll(constraintCompensationJoinColumns);
                         }
                         List<ColumnRefOperator> parentTableCompensationColumns =
@@ -949,7 +953,7 @@ public class MaterializedViewRewriter {
                                 .addAll(parentTableCompensationColumns);
                     }
                     if (mvExtraTableScanDescs.contains(mvTableScanDesc)) {
-                        if (joinOperator.isInnerJoin() || joinOperator.isCrossJoin() || joinOperator.isSemiJoin()) {
+                        if (joinType.isInnerJoin() || joinType.isCrossJoin() || joinType.isSemiJoin()) {
                             compensationJoinColumns.putAll(constraintCompensationJoinColumns);
                         }
                         List<ColumnRefOperator> childTableCompensationColumns =
@@ -1001,7 +1005,7 @@ public class MaterializedViewRewriter {
             TableScanDesc parentTableScanDesc, TableScanDesc tableScanDesc,
             List<Pair<String, String>> columnPairs, List<String> childKeys, List<String> parentKeys,
             Multimap<ColumnRefOperator, ColumnRefOperator> constraintCompensationJoinColumns,
-            MaterializedView materializedView, OptExpression mvExpression) {
+            MaterializedView materializedView, OptExpression mvExpression, OptExpression extraJoinOperator) {
         Table parentTable = parentTableScanDesc.getTable();
         Table childTable = tableScanDesc.getTable();
         Optional<OptExpression> joinOperatorOptional =
@@ -1009,7 +1013,7 @@ public class MaterializedViewRewriter {
         if (!joinOperatorOptional.isPresent()) {
             return false;
         }
-        parentTableScanDesc.setJoinOptExpression(joinOperatorOptional.get());
+        extraJoinOperator = joinOperatorOptional.get();
         LogicalJoinOperator joinOperator = joinOperatorOptional.get().getOp().cast();
         JoinOperator parentJoinType = joinOperator.getJoinType();
         if (parentJoinType.isInnerJoin()) {
