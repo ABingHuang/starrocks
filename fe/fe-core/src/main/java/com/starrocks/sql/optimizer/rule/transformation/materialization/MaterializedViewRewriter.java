@@ -887,7 +887,7 @@ public class MaterializedViewRewriter {
 
         // add edges to directed graph by FK-UK
         for (TableScanDesc mvTableScanDesc : mvGraph.nodes()) {
-             Table mvChildTable = mvTableScanDesc.getTable();
+            Table mvChildTable = mvTableScanDesc.getTable();
             List<ForeignKeyConstraint> foreignKeyConstraints = mvChildTable.getForeignKeyConstraints();
             List<ForeignKeyConstraint> mvForeignKeyConstraints = Lists.newArrayList();
             if (materializedView.getForeignKeyConstraints() != null) {
