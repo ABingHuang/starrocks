@@ -932,16 +932,20 @@ public class MaterializedViewRewriter {
 
                     Multimap<ColumnRefOperator, ColumnRefOperator> constraintCompensationJoinColumns
                             = ArrayListMultimap.create();
-                    OptExpression extraJoin = null;
+                    Optional<OptExpression> joinOperatorOptional = findJoin(mvParentTableScanDesc,
+                            mvTableScanDesc, columnPairs, materializationContext.getMvExpression());
+                    if (!joinOperatorOptional.isPresent()) {
+                        continue;
+                    }
                     if (!extraJoinCheck(mvParentTableScanDesc, mvTableScanDesc, columnPairs, childKeys,
                             parentKeys, constraintCompensationJoinColumns, materializedView,
-                            materializationContext.getMvExpression(), extraJoin)) {
+                            materializationContext.getMvExpression(), joinOperatorOptional.get())) {
                         continue;
                     }
 
                     // If `mvParentTableScanDesc` is not included in query's plan, add it
                     // to extraColumns.
-                    LogicalJoinOperator joinOperator = extraJoin.getOp().cast();
+                    LogicalJoinOperator joinOperator = joinOperatorOptional.get().getOp().cast();
                     JoinOperator joinType = joinOperator.getJoinType();
                     if (mvExtraTableScanDescs.contains(mvParentTableScanDesc)) {
                         if (joinType.isInnerJoin() || joinType.isCrossJoin() || joinType.isSemiJoin()) {
@@ -1005,16 +1009,10 @@ public class MaterializedViewRewriter {
             TableScanDesc parentTableScanDesc, TableScanDesc tableScanDesc,
             List<Pair<String, String>> columnPairs, List<String> childKeys, List<String> parentKeys,
             Multimap<ColumnRefOperator, ColumnRefOperator> constraintCompensationJoinColumns,
-            MaterializedView materializedView, OptExpression mvExpression, OptExpression extraJoinOperator) {
+            MaterializedView materializedView, OptExpression mvExpression, OptExpression extraJoin) {
         Table parentTable = parentTableScanDesc.getTable();
         Table childTable = tableScanDesc.getTable();
-        Optional<OptExpression> joinOperatorOptional =
-                findJoin(parentTableScanDesc, tableScanDesc, columnPairs, mvExpression);
-        if (!joinOperatorOptional.isPresent()) {
-            return false;
-        }
-        extraJoinOperator = joinOperatorOptional.get();
-        LogicalJoinOperator joinOperator = joinOperatorOptional.get().getOp().cast();
+        LogicalJoinOperator joinOperator = extraJoin.getOp().cast();
         JoinOperator parentJoinType = joinOperator.getJoinType();
         if (parentJoinType.isInnerJoin()) {
             // to check:
