@@ -47,7 +47,7 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
             } else if (o2 == null) {
                 return 1;
             } else {
-                return o1.toString().compareTo(o2.toString());
+                return o1.toString().toLowerCase().compareTo(o2.toString().toLowerCase());
             }
         }
     };
@@ -65,8 +65,8 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
                     } else if (o2 == null) {
                         return 1;
                     } else {
-                        String s1 = o1.toString();
-                        String s2 = o2.toString();
+                        String s1 = o1.toString().toLowerCase();
+                        String s2 = o2.toString().toLowerCase();
                         String n1 = s1.replaceAll("\\d: ", "");
                         String n2 = s2.replaceAll("\\d: ", "");
                         int ret = n1.compareTo(n2);
@@ -81,7 +81,7 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
     @Override
     public ScalarOperator visitCompoundPredicate(CompoundPredicateOperator predicate,
                                                  ScalarOperatorRewriteContext context) {
-        Set<ScalarOperator> after = Sets.newTreeSet(SCALAR_OPERATOR_COMPARATOR);
+        Set<ScalarOperator> after = Sets.newTreeSet(SCALAR_OPERATOR_COMPARATOR_IGNORE_COLUMN_ID);
         if (predicate.isAnd()) {
             List<ScalarOperator> before = Utils.extractConjuncts(predicate);
             after.addAll(before);
