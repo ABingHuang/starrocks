@@ -172,7 +172,7 @@ public final class ColumnRefOperator extends ScalarOperator {
 
         ColumnRefOperator leftColumn = (ColumnRefOperator) this;
         ColumnRefOperator rightColumn = (ColumnRefOperator) obj;
-        return leftColumn.getName().equals(rightColumn.getName())
+        return leftColumn.getName().equalsIgnoreCase(rightColumn.getName())
                 && leftColumn.getType().equals(rightColumn.getType())
                 && leftColumn.isNullable() == rightColumn.isNullable();
     }
