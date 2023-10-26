@@ -632,10 +632,10 @@ public class MaterializedViewRewriter {
             ColumnRefSet refColumns = tableToJoinColumns.computeIfAbsent(relationId, k -> new ColumnRefSet());
             refColumns.union(columnId);
         }
-        if (tableToJoinColumns.size() != 2) {
+        /*if (tableToJoinColumns.size() != 2) {
             // join predicate refs more than two tables, unsupported
             return false;
-        }
+        }*/
         return true;
     }
 
