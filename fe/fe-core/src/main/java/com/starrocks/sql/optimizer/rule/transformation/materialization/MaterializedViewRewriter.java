@@ -376,9 +376,11 @@ public class MaterializedViewRewriter {
             ScalarOperator queryOnPredicate = queryJoin.getOnPredicate();
             // relationId -> join on predicate used columns
             Map<Integer, ColumnRefSet> tableToJoinColumns = Maps.newHashMap();
+            // first is from left, second is from right
             List<Pair<ColumnRefOperator, ColumnRefOperator>> joinColumnPairs = Lists.newArrayList();
-            boolean isSupported = isSupportedPredicate(queryOnPredicate,
-                    materializationContext.getQueryRefFactory(), tableToJoinColumns, joinColumnPairs);
+            ColumnRefSet leftColumns = queryExpr.inputAt(0).getOutputColumns();
+            boolean isSupported = isSupportedPredicate(queryOnPredicate, materializationContext.getQueryRefFactory(),
+                    leftColumns, tableToJoinColumns, joinColumnPairs);
             if (!isSupported) {
                 logMVRewrite(mvRewriteContext, "join predicate is not supported {}", queryOnPredicate);
                 return false;
@@ -389,15 +391,12 @@ public class MaterializedViewRewriter {
                 Table table = materializationContext.getQueryRefFactory().getTableForColumn(entry.getValue().getFirstId());
                 usedColumnsToTable.put(entry.getValue(), table);
             }
-            ColumnRefSet leftColumns = queryExpr.inputAt(0).getOutputColumns();
+
             ColumnRefSet leftJoinColumns = new ColumnRefSet();
             ColumnRefSet rightJoinColumns = new ColumnRefSet();
-            for (ColumnRefSet columns : usedColumnsToTable.keySet()) {
-                if (leftColumns.containsAll(columns)) {
-                    leftJoinColumns.union(columns);
-                } else {
-                    rightJoinColumns.union(columns);
-                }
+            for (Pair<ColumnRefOperator, ColumnRefOperator> pair : joinColumnPairs) {
+                leftJoinColumns.union(pair.first);
+                rightJoinColumns.union(pair.second);
             }
             List<List<ColumnRefOperator>> joinColumnRefs = Lists.newArrayList(Lists.newArrayList(), Lists.newArrayList());
             // query based join columns pair
@@ -618,8 +617,8 @@ public class MaterializedViewRewriter {
     }
 
     private boolean isSupportedPredicate(
-            ScalarOperator onPredicate, ColumnRefFactory columnRefFactory, Map<Integer, ColumnRefSet> tableToJoinColumns,
-            List<Pair<ColumnRefOperator, ColumnRefOperator>> joinColumnPairs) {
+            ScalarOperator onPredicate, ColumnRefFactory columnRefFactory, ColumnRefSet leftColumns,
+            Map<Integer, ColumnRefSet> tableToJoinColumns, List<Pair<ColumnRefOperator, ColumnRefOperator>> joinColumnPairs) {
         List<ScalarOperator> conjuncts = Utils.extractConjuncts(onPredicate);
         List<ScalarOperator> binaryPredicates = conjuncts.stream()
                 .filter(conjunct -> ScalarOperator.isColumnEqualBinaryPredicate(conjunct)).collect(Collectors.toList());
@@ -628,7 +627,11 @@ public class MaterializedViewRewriter {
         }
 
         for (ScalarOperator scalarOperator : binaryPredicates) {
-            joinColumnPairs.add(Pair.create(scalarOperator.getChild(0).cast(), scalarOperator.getChild(1).cast()));
+            if (leftColumns.containsAll(scalarOperator.getChild(0).getUsedColumns())) {
+                joinColumnPairs.add(Pair.create(scalarOperator.getChild(0).cast(), scalarOperator.getChild(1).cast()));
+            } else {
+                joinColumnPairs.add(Pair.create(scalarOperator.getChild(1).cast(), scalarOperator.getChild(0).cast()));
+            }
         }
 
         ColumnRefSet usedColumns = Utils.compoundAnd(binaryPredicates).getUsedColumns();
@@ -636,7 +639,7 @@ public class MaterializedViewRewriter {
             int relationId = columnRefFactory.getRelationId(columnId);
             if (relationId == -1) {
                 // not use the column from table scan, unsupported
-                return false;
+                continue;
             }
             ColumnRefSet refColumns = tableToJoinColumns.computeIfAbsent(relationId, k -> new ColumnRefSet());
             refColumns.union(columnId);
