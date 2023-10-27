@@ -1985,10 +1985,13 @@ public class MaterializedViewRewriter {
         outerJoinEqualPredicates = MvUtils.canonizePredicateForRewrite(outerJoinEqualPredicates);
         List<ScalarOperator> outerJoinConjuncts = Utils.extractConjuncts(outerJoinEqualPredicates);
         for (ScalarOperator equalPredicate : Utils.extractConjuncts(equalPredicates)) {
-            if (outerJoinConjuncts.contains(equalPredicate)) {
-                // outer join on predicates can not be used to construct equivalence class
+            if (outerJoinConjuncts.stream().anyMatch(conjunct -> conjunct.equivalent(equalPredicate))) {
                 continue;
             }
+            /*if (outerJoinConjuncts.contains(equalPredicate)) {
+                // outer join on predicates can not be used to construct equivalence class
+                continue;
+            }*/
             Preconditions.checkState(equalPredicate.getChild(0).isColumnRef());
             ColumnRefOperator left = (ColumnRefOperator) equalPredicate.getChild(0);
             Preconditions.checkState(equalPredicate.getChild(1).isColumnRef());
