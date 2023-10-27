@@ -408,8 +408,13 @@ public class MaterializedViewRewriter {
                         leftJoinColumns, rightJoinColumns, queryJoinType, mvJoinType);
                 return false;
             }
-            JoinDeriveContext joinDeriveContext =
-                    new JoinDeriveContext(queryJoinType, mvJoinType, joinColumnRefs, compensatedEquivalenceColumns);
+            List<List<ColumnRefOperator>> childOutputColumns = Lists.newArrayList();
+            childOutputColumns.add(queryExpr.getChildOutputColumns(0)
+                    .getColumnRefOperators(materializationContext.getQueryRefFactory()));
+            childOutputColumns.add(queryExpr.getChildOutputColumns(1)
+                    .getColumnRefOperators(materializationContext.getQueryRefFactory()));
+            JoinDeriveContext joinDeriveContext = new JoinDeriveContext(
+                    queryJoinType, mvJoinType, joinColumnRefs, compensatedEquivalenceColumns, childOutputColumns);
             mvRewriteContext.addJoinDeriveContext(joinDeriveContext);
             return true;
         } else if (queryOp instanceof LogicalScanOperator) {
@@ -1417,25 +1422,23 @@ public class MaterializedViewRewriter {
             ColumnRewriter rewriter,
             Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp,
             List<ColumnRefOperator> joinColumns,
+            List<ColumnRefOperator> outputColumns,
             List<ScalarOperator> compensationPredicates,
             boolean isNotNull, boolean onlyJoinColumns, boolean onlyNotNullColumns) {
-        Integer relationId = materializationContext.getQueryRefFactory().getRelationId(joinColumns.get(0).getId());
+        /*Integer relationId = materializationContext.getQueryRefFactory().getRelationId(joinColumns.get(0).getId());
         List<ColumnRefOperator> relationColumns = Lists.newArrayList();
         Map<Integer, Integer> columnToRelationId = materializationContext.getQueryRefFactory().getColumnToRelationIds();
         for (Map.Entry<Integer, Integer> entry : columnToRelationId.entrySet()) {
             if (entry.getValue().equals(relationId)) {
                 relationColumns.add(materializationContext.getQueryRefFactory().getColumnRef(entry.getKey()));
             }
-        }
+        }*/
         Map<ColumnRefOperator, ColumnRefOperator> compensatedColumnsInMv = Maps.newHashMap();
-        for (ColumnRefOperator relationColumnRef : relationColumns) {
-            if (onlyNotNullColumns && relationColumnRef.isNullable()) {
-                continue;
-            }
+        for (ColumnRefOperator outputColumn : outputColumns) {
             ScalarOperator rewrittenColumnRef = rewriteMVCompensationExpression(rewriteContext, rewriter,
-                    mvColumnRefToScalarOp, relationColumnRef, false, false);
+                    mvColumnRefToScalarOp, outputColumn, false, false);
             if (rewrittenColumnRef != null) {
-                compensatedColumnsInMv.put(relationColumnRef, (ColumnRefOperator) rewrittenColumnRef);
+                compensatedColumnsInMv.put(outputColumn, (ColumnRefOperator) rewrittenColumnRef);
             }
         }
 
@@ -1454,6 +1457,9 @@ public class MaterializedViewRewriter {
                         .forEach(key -> candidateColumns.add(compensatedColumnsInMv.get(key)));
             } else {
                 candidateColumns.addAll(compensatedColumnsInMv.values());
+            }
+            if (onlyNotNullColumns) {
+                candidateColumns.removeIf(columnRefOperator -> columnRefOperator.isNullable());
             }
             if (candidateColumns.isEmpty()) {
                 return Optional.empty();
