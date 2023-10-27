@@ -849,8 +849,9 @@ public class MaterializedViewRewriter {
                 for (Pair<ColumnRefOperator, ColumnRefOperator> pair : deriveContext.getCompensatedEquivalenceColumns()) {
                     ScalarOperator first = mvRewriteContext.getQueryColumnRefRewriter().rewrite(pair.first);
                     ScalarOperator second = mvRewriteContext.getQueryColumnRefRewriter().rewrite(pair.second);
+                    // now only support this pattern ec
                     if (first.isColumnRef() && second.isColumnRef()) {
-                        queryBasedViewEqualPredicate.addEquivalence(pair.first, pair.second);
+                        queryBasedViewEqualPredicate.addEquivalence(first.cast(), second.cast());
                     }
                 }
             }
