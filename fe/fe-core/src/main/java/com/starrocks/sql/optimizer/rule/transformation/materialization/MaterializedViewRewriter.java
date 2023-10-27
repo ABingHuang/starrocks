@@ -1272,8 +1272,12 @@ public class MaterializedViewRewriter {
         } else {
             // all predicates are now query based
             final ScalarOperator equalPredicates = MvUtils.canonizePredicate(compensationPredicates.getEqualPredicates());
-            final ScalarOperator otherPredicates = MvUtils.canonizePredicate(Utils.compoundAnd(
+            ScalarOperator otherPredicates = MvUtils.canonizePredicate(Utils.compoundAnd(
                     compensationPredicates.getRangePredicates(), compensationPredicates.getResidualPredicates()));
+            if (!mvRewriteContext.getJoinDeriveContexts().isEmpty()) {
+                otherPredicates = addJoinDerivePredicate(
+                        rewriteContext, columnRewriter, mvColumnRefToScalarOp, otherPredicates);
+            }
 
             final ScalarOperator compensationPredicate = getMVCompensationPredicate(rewriteContext,
                     columnRewriter, mvColumnRefToScalarOp, equalPredicates, otherPredicates);
@@ -1343,7 +1347,8 @@ public class MaterializedViewRewriter {
                     equalPredicates, otherPredicates);
             return null;
         }
-        return addJoinDerivePredicate(rewriteContext, rewriter, mvColumnRefToScalarOp, compensationPredicate);
+        //return addJoinDerivePredicate(rewriteContext, rewriter, mvColumnRefToScalarOp, compensationPredicate);
+        return compensationPredicate;
     }
 
     private ScalarOperator addJoinDerivePredicate(
