@@ -847,7 +847,11 @@ public class MaterializedViewRewriter {
             }
             for (JoinDeriveContext deriveContext : mvRewriteContext.getJoinDeriveContexts()) {
                 for (Pair<ColumnRefOperator, ColumnRefOperator> pair : deriveContext.getCompensatedEquivalenceColumns()) {
-                    queryBasedViewEqualPredicate.addEquivalence(pair.first, pair.second);
+                    ScalarOperator first = mvRewriteContext.getQueryColumnRefRewriter().rewrite(pair.first);
+                    ScalarOperator second = mvRewriteContext.getQueryColumnRefRewriter().rewrite(pair.second);
+                    if (first.isColumnRef() && second.isColumnRef()) {
+                        queryBasedViewEqualPredicate.addEquivalence(pair.first, pair.second);
+                    }
                 }
             }
             rewriteContext.setQueryBasedViewEquivalenceClasses(queryBasedViewEqualPredicate);
