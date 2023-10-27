@@ -1362,37 +1362,44 @@ public class MaterializedViewRewriter {
             if (joinDeriveContext.getMvJoinType().isLeftOuterJoin() && joinDeriveContext.getQueryJoinType().isInnerJoin()) {
                 List<ColumnRefOperator> rightJoinColumns = joinDeriveContext.getRightJoinColumns();
                 derivedPredicateOpt = getDerivedPredicate(rewriteContext,
-                        rewriter, mvColumnRefToScalarOp, rightJoinColumns, predicates, true, true, false);
+                        rewriter, mvColumnRefToScalarOp, rightJoinColumns, joinDeriveContext.getRightChildOutputColumns(),
+                        predicates, true, true, false);
             } else if (joinDeriveContext.getMvJoinType().isLeftOuterJoin()
                     && joinDeriveContext.getQueryJoinType().isLeftAntiJoin()) {
                 List<ColumnRefOperator> rightJoinColumns = joinDeriveContext.getRightJoinColumns();
                 derivedPredicateOpt = getDerivedPredicate(rewriteContext,
-                        rewriter, mvColumnRefToScalarOp, rightJoinColumns, predicates, false, true, false);
+                        rewriter, mvColumnRefToScalarOp, rightJoinColumns, joinDeriveContext.getRightChildOutputColumns(),
+                        predicates, false, true, false);
             } else if (joinDeriveContext.getMvJoinType().isRightOuterJoin()
                     && joinDeriveContext.getQueryJoinType().isInnerJoin()) {
                 List<ColumnRefOperator> leftJoinColumns = joinDeriveContext.getLeftJoinColumns();
                 derivedPredicateOpt = getDerivedPredicate(rewriteContext,
-                        rewriter, mvColumnRefToScalarOp, leftJoinColumns, predicates, true, true, false);
+                        rewriter, mvColumnRefToScalarOp, leftJoinColumns, joinDeriveContext.getLeftChildOutputColumns(),
+                        predicates, true, true, false);
             } else if (joinDeriveContext.getMvJoinType().isRightOuterJoin()
                     && joinDeriveContext.getQueryJoinType().isRightAntiJoin()) {
                 List<ColumnRefOperator> leftJoinColumns = joinDeriveContext.getLeftJoinColumns();
                 derivedPredicateOpt = getDerivedPredicate(rewriteContext,
-                        rewriter, mvColumnRefToScalarOp, leftJoinColumns, predicates, false, true, false);
+                        rewriter, mvColumnRefToScalarOp, leftJoinColumns, joinDeriveContext.getLeftChildOutputColumns(),
+                        predicates, false, true, false);
             } else if (joinDeriveContext.getMvJoinType().isFullOuterJoin()
                     && joinDeriveContext.getQueryJoinType().isLeftOuterJoin()) {
                 List<ColumnRefOperator> leftJoinColumns = joinDeriveContext.getLeftJoinColumns();
                 derivedPredicateOpt = getDerivedPredicate(rewriteContext,
-                        rewriter, mvColumnRefToScalarOp, leftJoinColumns, predicates, true, false, true);
+                        rewriter, mvColumnRefToScalarOp, leftJoinColumns, joinDeriveContext.getLeftChildOutputColumns(),
+                        predicates, true, false, true);
             } else if (joinDeriveContext.getMvJoinType().isFullOuterJoin()
                     && joinDeriveContext.getQueryJoinType().isRightOuterJoin()) {
                 List<ColumnRefOperator> rightJoinColumns = joinDeriveContext.getRightJoinColumns();
                 derivedPredicateOpt = getDerivedPredicate(rewriteContext,
-                        rewriter, mvColumnRefToScalarOp, rightJoinColumns, predicates, true, false, true);
+                        rewriter, mvColumnRefToScalarOp, rightJoinColumns, joinDeriveContext.getRightChildOutputColumns(),
+                        predicates, true, false, true);
             } else if (joinDeriveContext.getMvJoinType().isFullOuterJoin()
                     && joinDeriveContext.getQueryJoinType().isInnerJoin()) {
                 List<ColumnRefOperator> rightJoinColumns = joinDeriveContext.getRightJoinColumns();
                 derivedPredicateOpt = getDerivedPredicate(rewriteContext,
-                        rewriter, mvColumnRefToScalarOp, rightJoinColumns, predicates, true, false, true);
+                        rewriter, mvColumnRefToScalarOp, rightJoinColumns, joinDeriveContext.getRightChildOutputColumns(),
+                        predicates, true, false, true);
                 if (!derivedPredicateOpt.isPresent()) {
                     // can not get derived predicates
                     return null;
@@ -1403,7 +1410,8 @@ public class MaterializedViewRewriter {
                 }
                 List<ColumnRefOperator> leftJoinColumns = joinDeriveContext.getLeftJoinColumns();
                 derivedPredicateOpt = getDerivedPredicate(rewriteContext,
-                        rewriter, mvColumnRefToScalarOp, leftJoinColumns, predicates, true, false, true);
+                        rewriter, mvColumnRefToScalarOp, leftJoinColumns, joinDeriveContext.getLeftChildOutputColumns(),
+                        predicates, true, false, true);
             }
             if (!derivedPredicateOpt.isPresent()) {
                 // can not get derived predicates
