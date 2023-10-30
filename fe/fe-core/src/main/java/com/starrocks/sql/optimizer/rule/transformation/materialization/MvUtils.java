@@ -1093,7 +1093,7 @@ public class MvUtils {
     // convert date to varchar type
     public static Range<PartitionKey> convertToVarcharRange(
             Range<PartitionKey> from, String dateFormat) throws AnalysisException {
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern(dateFormat);
+        DateTimeFormatter formatter = DateUtils.unixDatetimeFormatter(dateFormat);
         if (from.hasLowerBound() && from.hasUpperBound()) {
             DateLiteral lowerDate = (DateLiteral) from.lowerEndpoint().getKeys().get(0);
             String lowerDateString = lowerDate.toLocalDateTime().toLocalDate().format(formatter);
