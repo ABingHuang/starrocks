@@ -3224,9 +3224,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey where c_name = 'name' and c_custkey = 100";
             MVRewriteChecker checker = testRewriteOK(mv, query);
-            checker.contains("TABLE: mv0\n" +
+            checker.contains("0:OlapScanNode\n" +
+                    "     TABLE: mv0\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 30: c_custkey = 100, 31: c_name = 'name'\n" +
+                    "     PREDICATES: 31: c_name = 'name', 30: c_custkey = 100\n" +
                     "     partitions=1/1");
         }
 

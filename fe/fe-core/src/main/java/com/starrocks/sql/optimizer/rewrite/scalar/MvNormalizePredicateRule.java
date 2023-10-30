@@ -85,7 +85,7 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
     @Override
     public ScalarOperator visitCompoundPredicate(CompoundPredicateOperator predicate,
                                                  ScalarOperatorRewriteContext context) {
-        Set<ScalarOperator> after = Sets.newTreeSet(SCALAR_OPERATOR_COMPARATOR_IGNORE_COLUMN_ID);
+        Set<ScalarOperator> after = Sets.newTreeSet(SCALAR_OPERATOR_COMPARATOR);
         if (predicate.isAnd()) {
             List<ScalarOperator> before = Utils.extractConjuncts(predicate);
             after.addAll(before);
