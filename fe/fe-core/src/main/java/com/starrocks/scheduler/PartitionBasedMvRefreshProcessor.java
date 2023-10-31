@@ -1101,6 +1101,22 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 sourceTablePartitionRange.add(refBaseTableRangePartitionMap.get(partitionName));
             }
             sourceTablePartitionRange = MvUtils.mergeRanges(sourceTablePartitionRange);
+            // for nested mv, the base table may be another mv, which is partition by str2date(dt, '%Y%m%d')
+            // here we should convert date into '%Y%m%d' format
+            Expr partitionExpr = materializedView.getFirstPartitionRefTableExpr();
+            Pair<Table, Column> partitionTableAndColumn = materializedView.getBaseTableAndPartitionColumn();
+            boolean isConvertToDate = PartitionUtil.isConvertToDate(partitionExpr, partitionTableAndColumn.second);
+            if (isConvertToDate && partitionExpr instanceof FunctionCallExpr) {
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
+                Preconditions.checkState(functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE));
+                String dateFormat = functionCallExpr.getChild(0).toString();
+                List<Range<PartitionKey>> converted = Lists.newArrayList();
+                for (Range<PartitionKey> range : sourceTablePartitionRange) {
+                    Range<PartitionKey> varcharPartitionKey = MvUtils.convertToVarcharRange(range, dateFormat);
+                    converted.add(varcharPartitionKey);
+                }
+                sourceTablePartitionRange = converted;
+            }
             List<Expr> partitionPredicates =
                     MvUtils.convertRange(outputPartitionSlot, sourceTablePartitionRange);
             // range contains the min value could be null value

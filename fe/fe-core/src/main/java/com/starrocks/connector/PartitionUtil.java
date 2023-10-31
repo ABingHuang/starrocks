@@ -60,7 +60,6 @@ import com.starrocks.sql.common.PartitionDiffer;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.iceberg.PartitionField;
@@ -329,8 +328,8 @@ public class PartitionUtil {
                                                                         Expr partitionExpr)
             throws UserException {
         if (table.isNativeTableOrMaterializedView()) {
-            Map<String, Range<PartitionKey>> rangePartitionMap = ((OlapTable) table).getRangePartitionMap();
-            // for nested mv, the base table may be another mv, which is partition by str2date(dt, '%Y%m%d')
+            // Map<String, Range<PartitionKey>> rangePartitionMap = ((OlapTable) table).getRangePartitionMap();
+            /*// for nested mv, the base table may be another mv, which is partition by str2date(dt, '%Y%m%d')
             boolean isConvertToDate = isConvertToDate(partitionExpr, partitionColumn);
             if (isConvertToDate && partitionExpr instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
@@ -342,8 +341,8 @@ public class PartitionUtil {
                     converted.put(entry.getKey(), varcharPartitionKey);
                 }
                 return converted;
-            }
-            return rangePartitionMap;
+            }*/
+            return ((OlapTable) table).getRangePartitionMap();
         } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isJDBCTable()) {
             return PartitionUtil.getRangePartitionMapOfExternalTable(
                     table, partitionColumn, getPartitionNames(table), partitionExpr);
