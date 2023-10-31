@@ -1272,24 +1272,24 @@ public class MaterializedViewRewriter {
         } else {
             // all predicates are now query based
             final ScalarOperator equalPredicates = MvUtils.canonizePredicate(compensationPredicates.getEqualPredicates());
-            ScalarOperator otherPredicates = MvUtils.canonizePredicate(Utils.compoundAnd(
+            final ScalarOperator otherPredicates = MvUtils.canonizePredicate(Utils.compoundAnd(
                     compensationPredicates.getRangePredicates(), compensationPredicates.getResidualPredicates()));
-            if (!mvRewriteContext.getJoinDeriveContexts().isEmpty()) {
-                otherPredicates = addJoinDerivePredicate(
-                        rewriteContext, columnRewriter, mvColumnRefToScalarOp, otherPredicates);
-                if (otherPredicates == null) {
-                    logMVRewrite(mvRewriteContext, "Rewrite query failed: add join derive predicate failed");
-                    return null;
-                }
-            }
-
-            final ScalarOperator compensationPredicate = getMVCompensationPredicate(rewriteContext,
+            ScalarOperator compensationPredicate = getMVCompensationPredicate(rewriteContext,
                     columnRewriter, mvColumnRefToScalarOp, equalPredicates, otherPredicates);
             if (compensationPredicate == null) {
                 logMVRewrite(mvRewriteContext, "Rewrite query failed: success to convert query compensation predicates to MV " +
                         "but rewrite compensation failed");
                 return null;
             }
+
+            /*if (!mvRewriteContext.getJoinDeriveContexts().isEmpty()) {
+                compensationPredicate = addJoinDerivePredicate(
+                        rewriteContext, columnRewriter, mvColumnRefToScalarOp, compensationPredicate);
+                if (compensationPredicate == null) {
+                    logMVRewrite(mvRewriteContext, "Rewrite query failed: add join derive predicate failed");
+                    return null;
+                }
+            }*/
 
             if (!compensationPredicate.isTrue()) {
                 // NOTE: Keep mv's original predicates which have been already rewritten.
@@ -1351,8 +1351,8 @@ public class MaterializedViewRewriter {
                     equalPredicates, otherPredicates);
             return null;
         }
-        //return addJoinDerivePredicate(rewriteContext, rewriter, mvColumnRefToScalarOp, compensationPredicate);
-        return compensationPredicate;
+        return addJoinDerivePredicate(rewriteContext, rewriter, mvColumnRefToScalarOp, compensationPredicate);
+        // return compensationPredicate;
     }
 
     private ScalarOperator addJoinDerivePredicate(
@@ -1370,43 +1370,43 @@ public class MaterializedViewRewriter {
             Optional<ScalarOperator> derivedPredicateOpt = Optional.empty();
             if (joinDeriveContext.getMvJoinType().isLeftOuterJoin() && joinDeriveContext.getQueryJoinType().isInnerJoin()) {
                 List<ColumnRefOperator> rightJoinColumns = joinDeriveContext.getRightJoinColumns();
-                derivedPredicateOpt = getDerivedPredicate(rewriteContext,
+                derivedPredicateOpt = getDerivedPredicate(rewriteContext, rewriter,
                         mvColumnRefToScalarOp, rightJoinColumns, joinDeriveContext.getRightChildOutputColumns(),
                         predicates, true, true, false);
             } else if (joinDeriveContext.getMvJoinType().isLeftOuterJoin()
                     && joinDeriveContext.getQueryJoinType().isLeftAntiJoin()) {
                 List<ColumnRefOperator> rightJoinColumns = joinDeriveContext.getRightJoinColumns();
-                derivedPredicateOpt = getDerivedPredicate(rewriteContext,
+                derivedPredicateOpt = getDerivedPredicate(rewriteContext, rewriter,
                         mvColumnRefToScalarOp, rightJoinColumns, joinDeriveContext.getRightChildOutputColumns(),
                         predicates, false, true, false);
             } else if (joinDeriveContext.getMvJoinType().isRightOuterJoin()
                     && joinDeriveContext.getQueryJoinType().isInnerJoin()) {
                 List<ColumnRefOperator> leftJoinColumns = joinDeriveContext.getLeftJoinColumns();
-                derivedPredicateOpt = getDerivedPredicate(rewriteContext,
+                derivedPredicateOpt = getDerivedPredicate(rewriteContext, rewriter,
                         mvColumnRefToScalarOp, leftJoinColumns, joinDeriveContext.getLeftChildOutputColumns(),
                         predicates, true, true, false);
             } else if (joinDeriveContext.getMvJoinType().isRightOuterJoin()
                     && joinDeriveContext.getQueryJoinType().isRightAntiJoin()) {
                 List<ColumnRefOperator> leftJoinColumns = joinDeriveContext.getLeftJoinColumns();
-                derivedPredicateOpt = getDerivedPredicate(rewriteContext,
+                derivedPredicateOpt = getDerivedPredicate(rewriteContext, rewriter,
                         mvColumnRefToScalarOp, leftJoinColumns, joinDeriveContext.getLeftChildOutputColumns(),
                         predicates, false, true, false);
             } else if (joinDeriveContext.getMvJoinType().isFullOuterJoin()
                     && joinDeriveContext.getQueryJoinType().isLeftOuterJoin()) {
                 List<ColumnRefOperator> leftJoinColumns = joinDeriveContext.getLeftJoinColumns();
-                derivedPredicateOpt = getDerivedPredicate(rewriteContext,
+                derivedPredicateOpt = getDerivedPredicate(rewriteContext, rewriter,
                         mvColumnRefToScalarOp, leftJoinColumns, joinDeriveContext.getLeftChildOutputColumns(),
                         predicates, true, false, true);
             } else if (joinDeriveContext.getMvJoinType().isFullOuterJoin()
                     && joinDeriveContext.getQueryJoinType().isRightOuterJoin()) {
                 List<ColumnRefOperator> rightJoinColumns = joinDeriveContext.getRightJoinColumns();
-                derivedPredicateOpt = getDerivedPredicate(rewriteContext,
+                derivedPredicateOpt = getDerivedPredicate(rewriteContext, rewriter,
                         mvColumnRefToScalarOp, rightJoinColumns, joinDeriveContext.getRightChildOutputColumns(),
                         predicates, true, false, true);
             } else if (joinDeriveContext.getMvJoinType().isFullOuterJoin()
                     && joinDeriveContext.getQueryJoinType().isInnerJoin()) {
                 List<ColumnRefOperator> rightJoinColumns = joinDeriveContext.getRightJoinColumns();
-                derivedPredicateOpt = getDerivedPredicate(rewriteContext,
+                derivedPredicateOpt = getDerivedPredicate(rewriteContext, rewriter,
                         mvColumnRefToScalarOp, rightJoinColumns, joinDeriveContext.getRightChildOutputColumns(),
                         predicates, true, false, true);
                 if (!derivedPredicateOpt.isPresent()) {
@@ -1418,7 +1418,7 @@ public class MaterializedViewRewriter {
                     derivedPredicates.add(derivedPredicate);
                 }
                 List<ColumnRefOperator> leftJoinColumns = joinDeriveContext.getLeftJoinColumns();
-                derivedPredicateOpt = getDerivedPredicate(rewriteContext,
+                derivedPredicateOpt = getDerivedPredicate(rewriteContext, rewriter,
                         mvColumnRefToScalarOp, leftJoinColumns, joinDeriveContext.getLeftChildOutputColumns(),
                         predicates, true, false, true);
             }
@@ -1436,6 +1436,7 @@ public class MaterializedViewRewriter {
 
     private Optional<ScalarOperator> getDerivedPredicate(
             RewriteContext rewriteContext,
+            ColumnRewriter rewriter,
             Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp,
             List<ColumnRefOperator> joinColumns,
             List<ColumnRefOperator> outputColumns,
@@ -1452,9 +1453,9 @@ public class MaterializedViewRewriter {
         Map<ColumnRefOperator, ScalarOperator> compensatedColumnsInMv = Maps.newHashMap();
         Set<ColumnRefOperator> relatedColumns = Sets.newHashSet();
         for (ColumnRefOperator outputColumn : outputColumns) {
-            /*ScalarOperator rewrittenColumnRef = rewriteMVCompensationExpression(rewriteContext, rewriter,
-                    mvColumnRefToScalarOp, outputColumn, false, false);*/
             ScalarOperator rewrittenColumnRef = rewriteContext.getQueryColumnRefRewriter().rewrite(outputColumn);
+            rewrittenColumnRef = rewriteMVCompensationExpression(rewriteContext, rewriter,
+                    mvColumnRefToScalarOp, rewrittenColumnRef, false, false);
             if (rewrittenColumnRef != null) {
                 relatedColumns.addAll(rewrittenColumnRef.getColumnRefs());
                 compensatedColumnsInMv.put(outputColumn, rewrittenColumnRef);
@@ -1477,7 +1478,12 @@ public class MaterializedViewRewriter {
                 candidateColumns.addAll(relatedColumns);
             }
             if (onlyNotNullColumns) {
-                candidateColumns.removeIf(columnRefOperator -> columnRefOperator.isNullable());
+                for (ColumnRefOperator columnRef : compensatedColumnsInMv.keySet()) {
+                    // remove nullable columns
+                    if (columnRef.isNullable()) {
+                        candidateColumns.remove(compensatedColumnsInMv.get(columnRef));
+                    }
+                }
             }
             if (candidateColumns.isEmpty()) {
                 return Optional.empty();
@@ -2014,13 +2020,16 @@ public class MaterializedViewRewriter {
         outerJoinEqualPredicates = MvUtils.canonizePredicateForRewrite(outerJoinEqualPredicates);
         List<ScalarOperator> outerJoinConjuncts = Utils.extractConjuncts(outerJoinEqualPredicates);
         for (ScalarOperator equalPredicate : Utils.extractConjuncts(equalPredicates)) {
+            /*
             if (outerJoinConjuncts.stream().anyMatch(conjunct -> conjunct.equivalent(equalPredicate))) {
                 continue;
             }
-            /*if (outerJoinConjuncts.contains(equalPredicate)) {
+
+             */
+            if (outerJoinConjuncts.contains(equalPredicate)) {
                 // outer join on predicates can not be used to construct equivalence class
                 continue;
-            }*/
+            }
             Preconditions.checkState(equalPredicate.getChild(0).isColumnRef());
             ColumnRefOperator left = (ColumnRefOperator) equalPredicate.getChild(0);
             Preconditions.checkState(equalPredicate.getChild(1).isColumnRef());

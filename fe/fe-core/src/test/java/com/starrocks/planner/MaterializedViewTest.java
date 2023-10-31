@@ -538,7 +538,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select empid as col2, emps.locationid from " +
                 "emps left join locations on emps.locationid = locations.locationid " +
                 "where emps.locationid > 10");
-        // TODO: Query's left outer join will be converted to Inner Join.
+        // no locations.locationid in mv
         testRewriteFail(mv, "select empid as col2, locations.locationid from " +
                 "emps left join locations on emps.locationid = locations.locationid " +
                 "where locations.locationid > 10");
@@ -3227,7 +3227,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             checker.contains("0:OlapScanNode\n" +
                     "     TABLE: mv0\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 31: c_name = 'name', 30: c_custkey = 100\n" +
+                    "     PREDICATES: 30: c_custkey = 100, 31: c_name = 'name'\n" +
                     "     partitions=1/1");
         }
 
@@ -3337,6 +3337,8 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "     PREDICATES: 30: lo_custkey IS NOT NULL\n" +
                     "     partitions=1/1");
         }
+
+
 
         {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_custkey, c_name" +
