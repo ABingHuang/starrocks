@@ -27,6 +27,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -1110,7 +1111,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     && !sourceTablePartitionRange.isEmpty() && MvUtils.isDateRange(sourceTablePartitionRange.get(0))) {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
                 Preconditions.checkState(functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE));
-                String dateFormat = functionCallExpr.getChild(1).toString();
+                String dateFormat = ((StringLiteral) functionCallExpr.getChild(1)).getStringValue();
                 List<Range<PartitionKey>> converted = Lists.newArrayList();
                 for (Range<PartitionKey> range : sourceTablePartitionRange) {
                     Range<PartitionKey> varcharPartitionKey = MvUtils.convertToVarcharRange(range, dateFormat);
