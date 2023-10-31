@@ -1090,6 +1090,17 @@ public class MvUtils {
         return Range.all();
     }
 
+    public static boolean isDateRange(Range<PartitionKey> range) {
+        if (range.hasUpperBound()) {
+            PartitionKey partitionKey = range.upperEndpoint();
+            return partitionKey.getKeys().get(0) instanceof DateLiteral;
+        } else if (range.hasLowerBound()) {
+            PartitionKey partitionKey = range.lowerEndpoint();
+            return partitionKey.getKeys().get(0) instanceof DateLiteral;
+        }
+        return false;
+    }
+
     // convert date to varchar type
     public static Range<PartitionKey> convertToVarcharRange(
             Range<PartitionKey> from, String dateFormat) throws AnalysisException {

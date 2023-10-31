@@ -1106,7 +1106,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             Expr partitionExpr = materializedView.getFirstPartitionRefTableExpr();
             Pair<Table, Column> partitionTableAndColumn = materializedView.getBaseTableAndPartitionColumn();
             boolean isConvertToDate = PartitionUtil.isConvertToDate(partitionExpr, partitionTableAndColumn.second);
-            if (isConvertToDate && partitionExpr instanceof FunctionCallExpr) {
+            if (isConvertToDate && partitionExpr instanceof FunctionCallExpr
+                    && !sourceTablePartitionRange.isEmpty() && MvUtils.isDateRange(sourceTablePartitionRange.get(0))) {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
                 Preconditions.checkState(functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE));
                 String dateFormat = functionCallExpr.getChild(0).toString();
