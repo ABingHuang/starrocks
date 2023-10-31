@@ -328,20 +328,6 @@ public class PartitionUtil {
                                                                         Expr partitionExpr)
             throws UserException {
         if (table.isNativeTableOrMaterializedView()) {
-            // Map<String, Range<PartitionKey>> rangePartitionMap = ((OlapTable) table).getRangePartitionMap();
-            /*// for nested mv, the base table may be another mv, which is partition by str2date(dt, '%Y%m%d')
-            boolean isConvertToDate = isConvertToDate(partitionExpr, partitionColumn);
-            if (isConvertToDate && partitionExpr instanceof FunctionCallExpr) {
-                FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-                Preconditions.checkState(functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE));
-                String dateFormat = functionCallExpr.getChild(0).toString();
-                Map<String, Range<PartitionKey>> converted = Maps.newHashMap();
-                for (Map.Entry<String, Range<PartitionKey>> entry : rangePartitionMap.entrySet()) {
-                    Range<PartitionKey> varcharPartitionKey = MvUtils.convertToVarcharRange(entry.getValue(), dateFormat);
-                    converted.put(entry.getKey(), varcharPartitionKey);
-                }
-                return converted;
-            }*/
             return ((OlapTable) table).getRangePartitionMap();
         } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isJDBCTable()) {
             return PartitionUtil.getRangePartitionMapOfExternalTable(
