@@ -804,7 +804,7 @@ public class MaterializedViewRewriter {
                 .filter(columnRef -> !scanMvOutputColumns.contains(columnRef))
                 .collect(Collectors.toSet());
         final EquivalenceClasses queryEc = createEquivalenceClasses(
-                queryPredicateSplit.getEqualPredicates(), queryExpression, null);
+                queryPredicateSplit.getEqualPredicates(), queryExpression, mvRewriteContext.getQueryColumnRefRewriter(), null);
         if (queryEc == null) {
             logMVRewrite(mvRewriteContext, "Cannot construct query equivalence classes");
             return null;
@@ -845,7 +845,7 @@ public class MaterializedViewRewriter {
 
             // construct query based view EC
             final EquivalenceClasses queryBasedViewEqualPredicate =
-                    createEquivalenceClasses(mvEqualPredicate, mvExpression, columnRewriter);
+                    createEquivalenceClasses(mvEqualPredicate, mvExpression, mvColumnRefRewriter, columnRewriter);
             if (queryBasedViewEqualPredicate == null) {
                 logMVRewrite(mvRewriteContext, "Rewrite complete failed: cannot construct query based equivalence classes");
                 return null;
@@ -2001,10 +2001,12 @@ public class MaterializedViewRewriter {
     }
 
     private EquivalenceClasses createEquivalenceClasses(
-            ScalarOperator equalPredicate, OptExpression expression, ColumnRewriter columnRewriter) {
+            ScalarOperator equalPredicate, OptExpression expression,
+            ReplaceColumnRefRewriter refRewriter, ColumnRewriter columnRewriter) {
         List<ScalarOperator> outerJoinOnPredicate = MvUtils.collectOuterAntiJoinOnPredicate(expression);
         final PredicateSplit outerJoinPredicateSplit = PredicateSplit.splitPredicate(Utils.compoundAnd(outerJoinOnPredicate));
-        return createEquivalenceClasses(equalPredicate, outerJoinPredicateSplit.getEqualPredicates(), columnRewriter);
+        return createEquivalenceClasses(equalPredicate,
+                refRewriter.rewrite(outerJoinPredicateSplit.getEqualPredicates()), columnRewriter);
     }
 
     // equalPredicates eg: t1.a = t2.b and t1.c = t2.d
