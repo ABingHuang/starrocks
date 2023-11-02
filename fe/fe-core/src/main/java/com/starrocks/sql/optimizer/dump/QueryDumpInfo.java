@@ -26,8 +26,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
-import com.starrocks.sql.optimizer.OptimizerConfig;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 
 import java.util.ArrayList;
