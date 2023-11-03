@@ -643,6 +643,10 @@ public class Optimizer {
             }
             context.getRuleSet().addMultiTableMvRewriteRule();
         }
+        if (context.getLogicalTreeWithView() != null) {
+            context.getRuleSet().addSingleTableMvRewriteRule();
+            context.getRuleSet().addMultiTableMvRewriteRule();
+        }
 
         context.getTaskScheduler().pushTask(new OptimizeGroupTask(rootTaskContext, memo.getRootGroup()));
         context.getTaskScheduler().executeTasks(rootTaskContext);
