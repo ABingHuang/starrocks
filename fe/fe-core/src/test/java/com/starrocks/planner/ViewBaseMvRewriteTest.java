@@ -1,6 +1,7 @@
 package com.starrocks.planner;
 
 import com.starrocks.common.Config;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -9,64 +10,203 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase{
     public static void setUp() throws Exception {
         MaterializedViewTestBase.setUp();
 
-        starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
+        starRocksAssert.useDatabase("test");
         Config.default_replication_num = 1;
+        String viewQ1 = "create view view_q1\n" +
+                "as\n" +
+                "select\n" +
+                "    l_returnflag,\n" +
+                "    l_linestatus,\n" +
+                "    l_shipdate,\n" +
+                "    sum(l_quantity) as sum_qty,\n" +
+                "    sum(l_extendedprice) as sum_base_price,\n" +
+                "    sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,\n" +
+                "    sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,\n" +
+                "    avg(l_quantity) as avg_qty,\n" +
+                "    avg(l_extendedprice) as avg_price,\n" +
+                "    avg(l_discount) as avg_disc,\n" +
+                "    count(*) as count_order\n" +
+                "from\n" +
+                "    test.lineitem\n" +
+                "group by\n" +
+                "    l_returnflag,\n" +
+                "    l_linestatus,\n" +
+                "    l_shipdate";
+        starRocksAssert.withView(viewQ1);
+
+        String viewQ2 = "create view view_q2\n" +
+                "as\n" +
+                "select\n" +
+                "    s_name,\n" +
+                "    s_acctbal,\n" +
+                "    n_name,\n" +
+                "    p_partkey,\n" +
+                "    p_mfgr,\n" +
+                "    s_address,\n" +
+                "    s_phone,\n" +
+                "    s_comment\n" +
+                "from\n" +
+                "    part,\n" +
+                "    supplier,\n" +
+                "    partsupp,\n" +
+                "    nation,\n" +
+                "    region\n" +
+                "where\n" +
+                "        p_partkey = ps_partkey\n" +
+                "  and s_suppkey = ps_suppkey\n" +
+                "  and p_size = 12\n" +
+                "  and p_type like '%COPPER'\n" +
+                "  and s_nationkey = n_nationkey\n" +
+                "  and n_regionkey = r_regionkey\n" +
+                "  and r_name = 'AMERICA'\n" +
+                "  and ps_supplycost = (\n" +
+                "    select\n" +
+                "        min(ps_supplycost)\n" +
+                "    from\n" +
+                "        partsupp,\n" +
+                "        supplier,\n" +
+                "        nation,\n" +
+                "        region\n" +
+                "    where\n" +
+                "            p_partkey = ps_partkey\n" +
+                "      and s_suppkey = ps_suppkey\n" +
+                "      and s_nationkey = n_nationkey\n" +
+                "      and n_regionkey = r_regionkey\n" +
+                "      and r_name = 'AMERICA'\n" +
+                ")";
+        starRocksAssert.withView(viewQ2);
+
+        String viewQ3 = "create view view_q3\n" +
+                "as\n" +
+                "select\n" +
+                "    l_orderkey,\n" +
+                "    sum(l_extendedprice * (1 - l_discount)) as revenue,\n" +
+                "    o_orderdate,\n" +
+                "    o_shippriority,\n" +
+                "    l_shipdate,\n" +
+                "    c_mktsegment\n" +
+                "from\n" +
+                "    customer,\n" +
+                "    orders,\n" +
+                "    lineitem\n" +
+                "where\n" +
+                "  c_custkey = o_custkey\n" +
+                "  and l_orderkey = o_orderkey\n" +
+                "group by\n" +
+                "    l_orderkey,\n" +
+                "    o_orderdate,\n" +
+                "    o_shippriority,\n" +
+                "    l_shipdate,\n" +
+                "    c_mktsegment";
+        starRocksAssert.withView(viewQ3);
+
+        String viewQ4 = "create view view_q4\n" +
+                "as\n" +
+                "select\n" +
+                "    o_orderdate,\n" +
+                "    o_orderpriority,\n" +
+                "    count(*) as order_count\n" +
+                "from\n" +
+                "    orders\n" +
+                "where exists (\n" +
+                "        select\n" +
+                "            *\n" +
+                "        from\n" +
+                "            lineitem\n" +
+                "        where\n" +
+                "                l_orderkey = o_orderkey\n" +
+                "          and l_receiptdate > l_commitdate\n" +
+                "    )\n" +
+                "group by\n" +
+                "    o_orderpriority,\n" +
+                "    o_orderdate;";
+        starRocksAssert.withView(viewQ4);
+    }
+
+    @AfterClass
+    public static void tearDown() throws Exception {
+        starRocksAssert.dropView("view_q1");
+        starRocksAssert.dropView("view_q2");
+        starRocksAssert.dropView("view_q3");
+        starRocksAssert.dropView("view_q4");
     }
 
     @Test
-    public void testViewBasedMvRewrite() throws Exception {
-        starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(30000000);
-        /*{
+    public void testViewBaseMvRewriteBasic() throws Exception {
+        {
             starRocksAssert.withView("create view agg_view_1" +
                     " as " +
                     " select c1, sum(c2) as total from t1 group by c1");
-
             {
                 String mv = "select c5, c6, c1, total from t2 join agg_view_1 on c5 = c1";
                 String query = "select c5, c6, c1, total from t2 join agg_view_1 on c5 = c1";
                 testRewriteOK(mv, query);
             }
-        }*/
+        }
+    }
+
+    @Test
+    public void testViewBasedMvRewriteOnTpch() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(30000000);
+
         {
-            String view = "create view view_q1\n" +
-                    "as\n" +
-                    "select\n" +
-                    "    l_returnflag,\n" +
-                    "    l_linestatus,\n" +
-                    "    l_shipdate,\n" +
-                    "    sum(l_quantity) as sum_qty,\n" +
-                    "    sum(l_extendedprice) as sum_base_price,\n" +
-                    "    sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,\n" +
-                    "    sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,\n" +
-                    "    avg(l_quantity) as avg_qty,\n" +
-                    "    avg(l_extendedprice) as avg_price,\n" +
-                    "    avg(l_discount) as avg_disc,\n" +
-                    "    count(*) as count_order\n" +
-                    "from\n" +
-                    "    test.lineitem\n" +
-                    "group by\n" +
-                    "    l_returnflag,\n" +
-                    "    l_linestatus,\n" +
-                    "    l_shipdate";
-            starRocksAssert.withView(view);
-            /*{
-                String mv = "select * from view_q1 ";
-                String query = "select * from view_q1 where l_shipdate <= date '1998-12-01';";
-                testRewriteOK(mv, query);
-            }
-            {
-                String mv = "select *  from view_q1";
-                String query = "select l_returnflag, l_shipdate, sum(sum_qty) from view_q1 group by l_returnflag, l_shipdate;";
-                testRewriteOK(mv, query);
-            }*/
-            {
-                String mv = "select l_returnflag, sum_qty  from view_q1";
-                String query = "select l_returnflag, l_shipdate, sum(sum_qty) from view_q1 group by l_returnflag, l_shipdate;";
-                testRewriteOK(mv, query);
-            }
+            String mv = "select * from view_q1 ";
+            String query = "select * from view_q1 where l_shipdate <= date '1998-12-01';";
+            testRewriteOK(mv, query);
         }
         {
+            String mv = "select *  from view_q1";
+            String query = "select l_returnflag, l_shipdate, sum(sum_qty) from view_q1 group by l_returnflag, l_shipdate;";
+            testRewriteOK(mv, query);
+        }
 
+
+        {
+            String mv = "select * from view_q2";
+            String query = "select * from view_q2 order by\n" +
+                    "    s_acctbal desc,\n" +
+                    "    n_name,\n" +
+                    "    s_name,\n" +
+                    "    p_partkey limit 100;";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from view_q3";
+            String query = "select\n" +
+                    "    l_orderkey,\n" +
+                    "    sum(revenue) as revenue,\n" +
+                    "    o_orderdate,\n" +
+                    "    o_shippriority\n" +
+                    "from view_q3\n" +
+                    "where\n" +
+                    "  c_mktsegment = 'HOUSEHOLD'\n" +
+                    "  and o_orderdate < date '1995-03-11'\n" +
+                    "  and l_shipdate > date '1995-03-11'\n" +
+                    "group by\n" +
+                    "    l_orderkey,\n" +
+                    "    o_orderdate,\n" +
+                    "    o_shippriority\n" +
+                    "order by\n" +
+                    "    revenue desc,\n" +
+                    "    o_orderdate limit 10;";
+            testRewriteOK(mv, query);
+        }
+        {
+            String mv = "select * from view_q4";
+            String query = "select\n" +
+                    "    o_orderpriority,\n" +
+                    "    count(*) as order_count\n" +
+                    "from\n" +
+                    "    view_q4\n" +
+                    "where\n" +
+                    "  o_orderdate >= date '1994-09-01'\n" +
+                    "  and o_orderdate < date '1994-12-01'\n" +
+                    "group by\n" +
+                    "    o_orderpriority\n" +
+                    "order by\n" +
+                    "    o_orderpriority ;";
+            testRewriteOK(mv, query);
         }
     }
 }
