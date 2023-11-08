@@ -5,7 +5,7 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class ViewBaseMvRewriteTest extends MaterializedViewTestBase{
+public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
     @BeforeClass
     public static void setUp() throws Exception {
         MaterializedViewTestBase.setUp();
@@ -146,7 +146,7 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase{
     }
 
     @Test
-    public void testViewBasedMvRewriteOnTpch() throws Exception {
+    public void testViewBasedMvRewriteOnTpch() {
         starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(30000000);
 
         {
@@ -208,5 +208,16 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase{
                     "    o_orderpriority ;";
             testRewriteOK(mv, query);
         }
+    }
+
+    @Test
+    public void testMultiView() throws Exception {
+        starRocksAssert.withView("create view view_1 as " +
+                "select v1, sum(v2) as total1 from t0 group by v1");
+        starRocksAssert.withView("create view view_2 as " +
+                "select v4, sum(v5) as total2 from t1 group by v4");
+        String mv = "select v1 sum(total1), sum(total2) from view_1 join view_2 on v1 = v4 group by v1;";
+        String query = "select v1 sum(total1), sum(total2) from view_1 join view_2 on v1 = v4 group by v1;";
+        testRewriteOK(mv, query);
     }
 }
