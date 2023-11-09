@@ -121,6 +121,11 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
                 "    o_orderpriority,\n" +
                 "    o_orderdate;";
         starRocksAssert.withView(viewQ4);
+
+        String viewWithAllScalarType = "create view view_with_all_type\n" +
+                "as\n" +
+                "select * from test_all_type";
+        starRocksAssert.withView(viewWithAllScalarType);
     }
 
     @AfterClass
@@ -129,6 +134,7 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
         starRocksAssert.dropView("view_q2");
         starRocksAssert.dropView("view_q3");
         starRocksAssert.dropView("view_q4");
+        starRocksAssert.dropView("view_with_all_type");
     }
 
     @Test
@@ -216,8 +222,81 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
                 "select v1, sum(v2) as total1 from t0 group by v1");
         starRocksAssert.withView("create view view_2 as " +
                 "select v4, sum(v5) as total2 from t1 group by v4");
-        String mv = "select v1 sum(total1), sum(total2) from view_1 join view_2 on v1 = v4 group by v1;";
-        String query = "select v1 sum(total1), sum(total2) from view_1 join view_2 on v1 = v4 group by v1;";
-        testRewriteOK(mv, query);
+        starRocksAssert.withView("create view view_3 as " +
+                "select v4, sum(v5) as total3 from t1 group by v4");
+        starRocksAssert.withView("create view view_4 as " +
+                "select v4, sum(v5) as total4 from t1 group by v4");
+        starRocksAssert.withView("create view view_5 as " +
+                "select v4, sum(v5) as total5 from t1 group by v4");
+
+        {
+            // test two views
+            String mv = "select v1, sum(total1), sum(total2) from view_1 join view_2 on v1 = v4 group by v1;";
+            String query = "select v1, sum(total1), sum(total2) from view_1 join view_2 on v1 = v4 group by v1;";
+            testRewriteOK(mv, query);
+        }
+        {
+            // test three views
+            String mv = "select v1, sum(total1), sum(total2) from view_1 join view_2 on view_1.v1 = view_2.v4" +
+                    " join view_3 on view_1.v1 = view_3.v4" +
+                    " group by v1";
+            String query = "select v1, sum(total1), sum(total2) from view_1 join view_2 on view_1.v1 = view_2.v4" +
+                    " join view_3 on view_1.v1 = view_3.v4" +
+                    " group by v1";
+            testRewriteOK(mv, query);
+        }
+        {
+            // test four views
+            String mv = "select v1, sum(total1), sum(total2) from view_1 join view_2 on view_1.v1 = view_2.v4" +
+                    " join view_3 on view_1.v1 = view_3.v4" +
+                    " join view_4 on view_1.v1 = view_4.v4" +
+                    " group by v1";
+            String query = "select v1, sum(total1), sum(total2) from view_1 join view_2 on view_1.v1 = view_2.v4" +
+                    " join view_3 on view_1.v1 = view_3.v4" +
+                    " join view_4 on view_1.v1 = view_4.v4" +
+                    " group by v1";
+            testRewriteOK(mv, query);
+        }
+        {
+            // test five views
+            String mv = "select v1, sum(total1), sum(total2) from view_1 join view_2 on view_1.v1 = view_2.v4" +
+                    " join view_3 on view_1.v1 = view_3.v4" +
+                    " join view_4 on view_1.v1 = view_4.v4" +
+                    " join view_5 on view_1.v1 = view_5.v4" +
+                    " group by v1";
+            String query = "select v1, sum(total1), sum(total2) from view_1 join view_2 on view_1.v1 = view_2.v4" +
+                    " join view_3 on view_1.v1 = view_3.v4" +
+                    " join view_4 on view_1.v1 = view_4.v4" +
+                    " join view_5 on view_1.v1 = view_5.v4" +
+                    " group by v1";
+            testRewriteOK(mv, query);
+        }
+        starRocksAssert.dropView("view_1");
+        starRocksAssert.dropView("view_2");
+        starRocksAssert.dropView("view_3");
+        starRocksAssert.dropView("view_4");
+        starRocksAssert.dropView("view_5");
     }
+
+    @Test
+    public void testViewWithDifferentTypes() {
+        starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        {
+            String mv = "select * from view_with_all_type";
+            String query = "select * from view_with_all_type";
+            testRewriteOK(mv, query);
+        }
+    }
+
+    @Test
+    public void testViewUnionRewrite() {
+    }
+    // TODOs:
+    // 1. union
+    // 2. complex type
+    // 3. join/aggregate
+    // 4. bitmap/hll/percentile
+    // 5. union时间缝合，这个比较重要，cast/date_trunc
+    // 6. 分区谓词补偿
+    // 7. 外表支持
 }

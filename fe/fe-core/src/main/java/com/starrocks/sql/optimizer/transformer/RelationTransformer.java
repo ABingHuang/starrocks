@@ -646,7 +646,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             ImmutableList.Builder<ColumnRefOperator> outputVariablesBuilder = ImmutableList.builder();
 
             int relationId = columnRefFactory.getNextRelationId();
-            for (Column column : node.getView().getColumns()) {
+            for (Column column : node.getView().getBaseSchema()) {
                 ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
                         column.getType(),
                         column.isAllowNull());
