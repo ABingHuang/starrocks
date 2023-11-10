@@ -126,6 +126,26 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
                 "as\n" +
                 "select * from test_all_type";
         starRocksAssert.withView(viewWithAllScalarType);
+
+        String testAggView = "create view test_agg_view\n" +
+                "as\n" +
+                "select * from test_agg";
+        starRocksAssert.withView(testAggView);
+
+        String testArrayView = "create view test_array_view\n" +
+                "as\n" +
+                "select * from tarray";
+        starRocksAssert.withView(testArrayView);
+
+        String testMapView = "create view test_map_view\n" +
+                "as\n" +
+                "select * from tmap";
+        starRocksAssert.withView(testMapView);
+
+        String testJsonView = "create view test_json_view\n" +
+                "as\n" +
+                "select * from tjson";
+        starRocksAssert.withView(testJsonView);
     }
 
     @AfterClass
@@ -135,6 +155,10 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
         starRocksAssert.dropView("view_q3");
         starRocksAssert.dropView("view_q4");
         starRocksAssert.dropView("view_with_all_type");
+        starRocksAssert.dropView("test_agg_view");
+        starRocksAssert.dropView("test_array_view");
+        starRocksAssert.dropView("test_map_view");
+        starRocksAssert.dropView("test_json_view");
     }
 
     @Test
@@ -142,12 +166,13 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
         {
             starRocksAssert.withView("create view agg_view_1" +
                     " as " +
-                    " select c1, sum(c2) as total from t1 group by c1");
+                    " select v4, sum(v4) as total from t1 group by v4");
             {
-                String mv = "select c5, c6, c1, total from t2 join agg_view_1 on c5 = c1";
-                String query = "select c5, c6, c1, total from t2 join agg_view_1 on c5 = c1";
+                String mv = "select v7, v8, v4, total from t2 join agg_view_1 on v7 = v4";
+                String query = "select v7, v8, v4, total from t2 join agg_view_1 on v7 = v4";
                 testRewriteOK(mv, query);
             }
+            starRocksAssert.dropView("agg_view_1");
         }
     }
 
@@ -286,10 +311,65 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
             String query = "select * from view_with_all_type";
             testRewriteOK(mv, query);
         }
+
+        // bitmap/hll/percentile
+        {
+            String mv = "select * from test_agg_view";
+            String query = "select * from test_agg_view";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test_agg_view";
+            String query = "select k1, bitmap_union(b1), hll_union(h1), percentile_union(p1) from test_agg_view group by k1";
+            testRewriteOK(mv, query);
+        }
+
+        // array
+        {
+            String mv = "select * from test_array_view";
+            String query = "select * from test_array_view";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test_array_view";
+            String query = "select v1, array_agg(v3) from test_array_view group by v1";
+            testRewriteOK(mv, query);
+        }
+
+        // map
+        {
+            String mv = "select * from test_map_view";
+            String query = "select * from test_map_view";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test_map_view";
+            String query = "select v1, map_keys(v3), map_values(v3) from test_map_view";
+            testRewriteOK(mv, query);
+        }
+
+        // json
+        {
+            String mv = "select * from test_json_view";
+            String query = "select * from test_json_view";
+            testRewriteOK(mv, query);
+        }
     }
 
     @Test
-    public void testViewUnionRewrite() {
+    public void testViewUnionRewrite() throws Exception {
+        {
+            // OlapTable
+        }
+        {
+            // hive table
+        }
+        {
+            // iceberg table
+        }
     }
     // TODOs:
     // 1. union
