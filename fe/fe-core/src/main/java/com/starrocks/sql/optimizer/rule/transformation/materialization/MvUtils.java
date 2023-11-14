@@ -76,6 +76,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -394,8 +395,9 @@ public class MvUtils {
         Preconditions.checkState(mvStmt instanceof QueryStatement);
         Analyzer.analyze(mvStmt, connectContext);
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
+        Pair<Table, Column> partitionInfo = mv.getBaseTableAndPartitionColumn();
         LogicalPlan logicalPlan =
-                new RelationTransformer(columnRefFactory, connectContext, keepView).transformWithSelectLimit(query);
+                new RelationTransformer(columnRefFactory, connectContext, keepView, partitionInfo).transformWithSelectLimit(query);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(
                 connectContext,
@@ -1170,12 +1172,21 @@ public class MvUtils {
         List<OptExpression> scanExprs = MvUtils.collectScanExprs(mvPlan);
         for (OptExpression scanExpr : scanExprs) {
             LogicalScanOperator scanOperator = (LogicalScanOperator) scanExpr.getOp();
-            if (!isRefBaseTable(scanOperator, refBaseTable)) {
+            if (scanOperator instanceof LogicalViewScanOperator) {
+                LogicalViewScanOperator viewScanOperator = scanOperator.cast();
+                if (!viewScanOperator.isHasPartitionColumn()) {
+                    continue;
+                }
+            } else if (!isRefBaseTable(scanOperator, refBaseTable)) {
                 continue;
             }
 
-            ColumnRefOperator columnRef = scanOperator.getColumnReference(partitionColumn);
-            List<ScalarOperator> partitionPredicates = MvUtils.convertRanges(columnRef, latestBaseTableRanges);
+            Optional<ColumnRefOperator> columnRefOption = scanOperator.getColRefToColumnMetaMap().keySet().stream()
+                    .filter(column -> column.getName().equalsIgnoreCase(partitionColumn.getName())).findFirst();
+            if (!columnRefOption.isPresent()) {
+                continue;
+            }
+            List<ScalarOperator> partitionPredicates = MvUtils.convertRanges(columnRefOption.get(), latestBaseTableRanges);
             ScalarOperator partialPartitionPredicate = Utils.compoundOr(partitionPredicates);
             return partialPartitionPredicate;
         }

@@ -24,16 +24,24 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import java.util.Map;
 
 public class LogicalViewScanOperator  extends LogicalScanOperator {
+    private boolean hasPartitionColumn;
+
     public LogicalViewScanOperator(
             Table table,
             Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-            Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
+            Map<Column, ColumnRefOperator> columnMetaToColRefMap,
+            boolean hasPartitionColumn) {
         super(OperatorType.LOGICAL_VIEW_SCAN, table, colRefToColumnMetaMap,
                 columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null, null);
+        this.hasPartitionColumn = hasPartitionColumn;
     }
 
     private LogicalViewScanOperator() {
         super(OperatorType.LOGICAL_VIEW_SCAN);
+    }
+
+    public boolean isHasPartitionColumn() {
+        return hasPartitionColumn;
     }
 
     @Override
@@ -55,6 +63,7 @@ public class LogicalViewScanOperator  extends LogicalScanOperator {
         @Override
         public LogicalViewScanOperator.Builder withOperator(LogicalViewScanOperator scanOperator) {
             super.withOperator(scanOperator);
+            builder.hasPartitionColumn = scanOperator.hasPartitionColumn;
             return this;
         }
     }

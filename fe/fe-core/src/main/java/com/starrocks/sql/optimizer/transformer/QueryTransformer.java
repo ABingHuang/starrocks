@@ -26,6 +26,8 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
@@ -67,13 +69,15 @@ class QueryTransformer {
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
     private final CTETransformerContext cteContext;
     private final boolean keepView;
+    private final Pair<Table, Column> partitionInfo;
 
     public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
-                            CTETransformerContext cteContext, boolean keepView) {
+                            CTETransformerContext cteContext, boolean keepView, Pair<Table, Column> partitionInfo) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.cteContext = cteContext;
         this.keepView = keepView;
+        this.partitionInfo = partitionInfo;
     }
 
     public LogicalPlan plan(SelectRelation queryBlock, ExpressionMapping outer) {
@@ -157,7 +161,8 @@ class QueryTransformer {
         // and the internal cte with the same name will overwrite the original mapping
         CTETransformerContext newCteContext = new CTETransformerContext(cteContext);
         return new RelationTransformer(columnRefFactory, session,
-                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())), newCteContext, keepView)
+                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
+                newCteContext, keepView, partitionInfo)
                 .visit(node).getRootBuilder();
     }
 

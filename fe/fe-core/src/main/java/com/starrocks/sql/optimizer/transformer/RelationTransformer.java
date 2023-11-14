@@ -28,6 +28,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
@@ -43,6 +44,7 @@ import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.FieldId;
 import com.starrocks.sql.analyzer.RelationFields;
@@ -142,6 +144,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
     private final CTETransformerContext cteContext;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
     private final boolean keepView;
+    // used by MaterializedViewOptimizer to find partition column in view based mv rewrite
+    // which is used to construct compensation partition predicates
+    private final Pair<Table, Column> partitionInfo;
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session) {
         this(columnRefFactory, session, false);
@@ -150,21 +155,34 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, boolean keepView) {
         this(columnRefFactory, session,
                 new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                new CTETransformerContext(), keepView);
+                new CTETransformerContext(), keepView, null);
+    }
+
+    public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
+                               boolean keepView, Pair<Table, Column> partitionInfo) {
+        this(columnRefFactory, session,
+                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
+                new CTETransformerContext(), keepView, partitionInfo);
     }
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer,
                                CTETransformerContext cteContext) {
-        this(columnRefFactory, session, outer, cteContext, false);
+        this(columnRefFactory, session, outer, cteContext, false, null);
     }
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer,
                                CTETransformerContext cteContext, boolean keepView) {
+        this(columnRefFactory, session, outer, cteContext, keepView, null);
+    }
+
+    public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer,
+                               CTETransformerContext cteContext, boolean keepView, Pair<Table, Column> partitionInfo) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.outer = outer;
         this.cteContext = cteContext;
         this.keepView = keepView;
+        this.partitionInfo = partitionInfo;
     }
 
     // transform relation to plan with session variable sql_select_limit
@@ -239,7 +257,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
     @Override
     public LogicalPlan visitSelect(SelectRelation node, ExpressionMapping context) {
-        return new QueryTransformer(columnRefFactory, session, cteContext, keepView).plan(node, outer);
+        return new QueryTransformer(columnRefFactory, session, cteContext, keepView, partitionInfo).plan(node, outer);
     }
 
     @Override
@@ -659,9 +677,19 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
             Map<Column, ColumnRefOperator> columnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
             List<ColumnRefOperator> outputVariables = outputVariablesBuilder.build();
+            ImmutableMap<ColumnRefOperator, Column> columnRefOperatorToColumn = colRefToColumnMetaMapBuilder.build();
+            boolean hasPartitionColumn = false;
+            if (partitionInfo != null) {
+                Map<TableName, Table> baseTables = AnalyzerUtils.collectAllTableAndView(node.getQueryStatement());
+                if (baseTables.containsValue(partitionInfo.first)
+                        && outputVariables.stream().anyMatch(
+                                column -> column.getName().equalsIgnoreCase(partitionInfo.second.getName()))) {
+                    hasPartitionColumn = true;
+                }
+            }
 
             LogicalViewScanOperator scanOperator = new LogicalViewScanOperator(
-                    node.getView(), colRefToColumnMetaMapBuilder.build(), columnMetaToColRefMap);
+                    node.getView(), columnRefOperatorToColumn, columnMetaToColRefMap, hasPartitionColumn);
             OptExprBuilder scanBuilder = new OptExprBuilder(scanOperator, Collections.emptyList(),
                     new ExpressionMapping(node.getScope(), outputVariables));
             return new LogicalPlan(scanBuilder, outputVariables, null);
