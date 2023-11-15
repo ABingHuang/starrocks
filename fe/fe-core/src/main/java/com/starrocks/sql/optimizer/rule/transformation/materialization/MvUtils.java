@@ -396,8 +396,8 @@ public class MvUtils {
         Analyzer.analyze(mvStmt, connectContext);
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
         Pair<Table, Column> partitionInfo = mv.getBaseTableAndPartitionColumn();
-        LogicalPlan logicalPlan =
-                new RelationTransformer(columnRefFactory, connectContext, keepView, partitionInfo).transformWithSelectLimit(query);
+        LogicalPlan logicalPlan = new RelationTransformer(
+                columnRefFactory, connectContext, keepView, partitionInfo).transformWithSelectLimit(query);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(
                 connectContext,
