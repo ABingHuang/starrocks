@@ -726,12 +726,12 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                 Map<ColumnRefOperator, ScalarOperator> projectionMap = Maps.newHashMap();
                 for (int i = 0; i < outputColumns.size(); i++) {
                     Column column = viewSchema.get(i);
-                    /*ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
+                    ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
                             column.getType(),
-                            column.isAllowNull());*/
-                    ColumnRefOperator outputColumn = outputColumns.get(i);
+                            column.isAllowNull());
+                    /*ColumnRefOperator outputColumn = outputColumns.get(i);
                     ColumnRefOperator columnRef = columnRefFactory.create(outputColumn.getName(),
-                            outputColumn.getType(), outputColumn.isNullable());
+                            outputColumn.getType(), outputColumn.isNullable());*/
                     columnRefFactory.updateColumnToRelationIds(columnRef.getId(), relationId);
                     columnRefFactory.updateColumnRefToColumns(columnRef, column, node.getView());
                     colRefToColumnMetaMapBuilder.put(columnRef, viewSchema.get(i));

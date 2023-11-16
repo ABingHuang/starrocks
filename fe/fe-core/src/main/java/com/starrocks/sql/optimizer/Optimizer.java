@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.amazonaws.services.glue.model.Logical;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -31,8 +32,10 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -95,6 +98,7 @@ import com.starrocks.sql.optimizer.validate.PlanValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -258,9 +262,9 @@ public class Optimizer {
     }
 
     private void addViewBasedPlanIntoMemo(OptExpression logicOperatorTree, OptExpression planWithView, Memo memo) {
-        Projection projection = rewriteProjection(logicOperatorTree, planWithView);
+        /*Projection projection = rewriteProjection(logicOperatorTree, planWithView);
         planWithView.getOp().setProjection(projection);
-        deriveLogicalProperty(planWithView);
+        deriveLogicalProperty(planWithView);*/
         memo.copyIn(memo.getRootGroup(), planWithView);
     }
 
@@ -345,7 +349,16 @@ public class Optimizer {
     private OptExpression extractLogicalPlanWithView(OptExpression logicalTree) {
         List<OptExpression> inputs = Lists.newArrayList();
         if (logicalTree.getOp().getEquivalentOp() != null) {
-            return OptExpression.create(logicalTree.getOp().getEquivalentOp());
+            LogicalViewScanOperator viewScanOperator = logicalTree.getOp().getEquivalentOp().cast();
+            Projection projection = viewScanOperator.getProjection();
+            LogicalViewScanOperator.Builder builder = new LogicalViewScanOperator.Builder();
+            builder.withOperator(viewScanOperator);
+            builder.setProjection(null);
+            LogicalViewScanOperator clone = builder.build();
+            OptExpression viewScanExpr = OptExpression.create(clone);
+            LogicalProjectOperator projectOperator = new LogicalProjectOperator(projection.getColumnRefMap());
+            OptExpression projectionExpr = OptExpression.create(projectOperator, viewScanExpr);
+            return projectionExpr;
         } else {
             for (OptExpression input : logicalTree.getInputs()) {
                 OptExpression newInput = extractLogicalPlanWithView(input);
@@ -401,6 +414,7 @@ public class Optimizer {
         if (sessionVariable.isEnableRboTablePrune()) {
             context.setEnableLeftRightJoinEquivalenceDerive(false);
         }
+
         // inline CTE if consume use once
         while (cteContext.hasInlineCTE()) {
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INLINE_CTE);
@@ -518,8 +532,11 @@ public class Optimizer {
         if (isEnableSingleTableMVRewrite(rootTaskContext, sessionVariable, tree)) {
             // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
-            // TODO: add single table rewrite rules here
         }
+        // first try to apply view based mv rewrite rule
+        // because some view scan operators may be rewritten by mvs,
+        // but some view scans may not, we should rewrite unrewritten views back to its original plan tree
+        // and try to rewrite the total tree with the following rules
         if (context.getLogicalTreeWithView() != null
                 && MvUtils.getAllTables(context.getLogicalTreeWithView()).size() == 1
                 && !optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)
@@ -541,16 +558,11 @@ public class Optimizer {
     private void viewBasedMvRuleRewrite(OptExpression tree, TaskContext rootTaskContext) {
         try {
             OptExpression treeWithView = context.getLogicalTreeWithView();
-            /*// construct projection to make sure the output columns are the same with original logical tree
-            Projection newProjection = rewriteProjection(tree.inputAt(0), treeWithView);
-            treeWithView.getOp().setProjection(newProjection);*/
-
             // should add a LogicalTreeAnchorOperator for rewrite
             treeWithView = OptExpression.create(new LogicalTreeAnchorOperator(), treeWithView);
             deriveLogicalProperty(treeWithView);
             ruleRewriteIterative(treeWithView, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
-            // TODO: judge whether view logical tree is rewritten
-            boolean isRewritten = true;
+            boolean isRewritten = judgeIsRewritten(treeWithView);
             if (isRewritten) {
                 // replace original tree plan
                 tree.setChild(0, treeWithView.inputAt(0));
@@ -560,6 +572,22 @@ public class Optimizer {
         } finally {
             // reset logical tree with view
             context.setLogicalTreeWithView(null);
+        }
+    }
+
+    private boolean judgeIsRewritten(OptExpression tree) {
+        List<Operator> viewScanOperators = Lists.newArrayList();
+        collectViewScanOperator(tree, viewScanOperators);
+        return viewScanOperators.size() < context.getViewPlanMap().size();
+    }
+
+    private void collectViewScanOperator(OptExpression tree, Collection<Operator> viewScanOperators) {
+        if (tree.getOp() instanceof LogicalViewScanOperator) {
+            viewScanOperators.add(tree.getOp());
+        } else {
+            for (OptExpression input : tree.getInputs()) {
+                collectViewScanOperator(input, viewScanOperators);
+            }
         }
     }
 

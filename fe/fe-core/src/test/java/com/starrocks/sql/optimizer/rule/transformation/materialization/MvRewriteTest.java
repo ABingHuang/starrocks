@@ -2038,7 +2038,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
                     " partition start('2020-04-01') end ('2020-07-01') with sync mode;");
             String query = "SELECT * from view_based_test_1";
             String plan = getFragmentPlan(query);
-            System.out.println(plan);
             PlanTestBase.assertContains(plan, "view_based_mv_1");
 
         }
