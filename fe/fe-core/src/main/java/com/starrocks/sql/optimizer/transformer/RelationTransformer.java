@@ -759,11 +759,11 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                 builder.getRoot().getOp().setEquivalentOp(scanOperator);
                 // scanOperator.setEquivalentOp(builder.getRoot().getOp());
 
-            /*// set expression equivalence
-            // TODO: maybe this is useless because the lack of transmissibility for OptExpression
-            OptExpression viewScanExpr = OptExpression.create(scanOperator);
-            viewScanExpr.setEquivalentExpr(logicalPlan.getRoot());
-            logicalPlan.getRoot().setEquivalentExpr(viewScanExpr);*/
+                /*// set expression equivalence
+                // TODO: maybe this is useless because the lack of transmissibility for OptExpression
+                OptExpression viewScanExpr = OptExpression.create(scanOperator);
+                viewScanExpr.setEquivalentExpr(logicalPlan.getRoot());
+                logicalPlan.getRoot().setEquivalentExpr(viewScanExpr);*/
                 /*return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());*/
                 viewPlanMap.put(scanOperator, viewLogicalPlan);
             }
