@@ -41,9 +41,6 @@ public class MvPlanContext {
     // because we will not use other fields
     private boolean isValidMvPlan;
 
-    // mv's logical plan
-    private OptExpression logicalPlanWithView;
-
     public MvPlanContext() {
         this.logicalPlan = null;
         this.outputColumns = null;
@@ -75,13 +72,5 @@ public class MvPlanContext {
 
     public boolean isValidMvPlan() {
         return isValidMvPlan;
-    }
-
-    public void setLogicalPlanWithView(OptExpression logicalPlanWithView) {
-        this.logicalPlanWithView = logicalPlanWithView;
-    }
-
-    public OptExpression getLogicalPlanWithView() {
-        return logicalPlanWithView;
     }
 }

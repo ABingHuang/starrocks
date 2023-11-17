@@ -57,11 +57,6 @@ public class OptExpression {
     private MVOperatorProperty mvOperatorProperty;
     private PhysicalPropertySet outputProperty;
 
-    // an expression logically equivalent to 'this' OptExpression
-    // used by view based mv rewrite
-    // eg: LogicalViewScanOperator expression is logically equivalent to the expression build from the view
-    private OptExpression equivalentExpr;
-
     public OptExpression(Operator op) {
         this.op = op;
         this.inputs = Lists.newArrayList();
@@ -198,14 +193,6 @@ public class OptExpression {
 
     public void setCost(double cost) {
         this.cost = cost;
-    }
-
-    public OptExpression getEquivalentExpr() {
-        return equivalentExpr;
-    }
-
-    public void setEquivalentExpr(OptExpression equivalentExpr) {
-        this.equivalentExpr = equivalentExpr;
     }
 
     @Override

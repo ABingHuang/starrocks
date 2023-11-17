@@ -248,7 +248,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         // set output row count to max to make optimizer skip this plan
         builder.setOutputRowCount(POSITIVE_INFINITY);
         builder.setTableRowCountMayInaccurate(true);
-        // 4. estimate cardinality
         context.setStatistics(builder.build());
         return visitOperator(node, context);
     }

@@ -146,15 +146,6 @@ public class StatementPlanner {
             logicalPlan = new RelationTransformer(columnRefFactory, session, viewPlanMap).transformWithSelectLimit(query);
         }
 
-        /*LogicalPlan logicalPlanWithView;
-
-        // just poc
-        // TODO: consider where and how to pass it?
-        try (Timer ignored = Tracers.watchScope("TransformerWithView")) {
-            *//*logicalPlanWithView = new RelationTransformer(columnRefFactory, session, true).transformWithSelectLimit(query);*//*
-            logicalPlanWithView = extraceLogicalPlanWithView(logicalPlan);
-        }*/
-
         OptExpression optimizedPlan;
         try (Timer ignored = Tracers.watchScope("Optimizer")) {
             // 2. Optimize logical plan and build physical plan
@@ -162,10 +153,10 @@ public class StatementPlanner {
             optimizedPlan = optimizer.optimize(
                     session,
                     logicalPlan.getRoot(),
-                    viewPlanMap,
                     new PhysicalPropertySet(),
                     new ColumnRefSet(logicalPlan.getOutputColumn()),
-                    columnRefFactory);
+                    columnRefFactory,
+                    viewPlanMap);
         }
         try (Timer ignored = Tracers.watchScope("ExecPlanBuild")) {
             // 3. Build fragment exec plan
@@ -219,15 +210,6 @@ public class StatementPlanner {
                 logicalPlan = new RelationTransformer(columnRefFactory, session, viewPlanMap).transformWithSelectLimit(query);
             }
 
-            // just poc
-            // TODO: consider where and how to pass it?
-            /*LogicalPlan logicalPlanWithView;
-            try (Timer ignored = Tracers.watchScope("TransformerWithView")) {
-                // TODO: 优化一下这个逻辑，只有包含view的plan才需要走这个逻辑
-                *//*logicalPlanWithView = new RelationTransformer(columnRefFactory, session, true).transformWithSelectLimit(query);*//*
-                logicalPlanWithView = extraceLogicalPlanWithView(logicalPlan);
-            }*/
-
             OptExpression optimizedPlan;
             try (Timer ignored = Tracers.watchScope("Optimizer")) {
                 // 2. Optimize logical plan and build physical plan
@@ -235,10 +217,10 @@ public class StatementPlanner {
                 optimizedPlan = optimizer.optimize(
                         session,
                         logicalPlan.getRoot(),
-                        viewPlanMap,
                         new PhysicalPropertySet(),
                         new ColumnRefSet(logicalPlan.getOutputColumn()),
-                        columnRefFactory);
+                        columnRefFactory,
+                        viewPlanMap);
             }
             try (Timer ignored = Tracers.watchScope("ExecPlanBuild")) {
                 // 3. Build fragment exec plan
@@ -267,24 +249,6 @@ public class StatementPlanner {
         Preconditions.checkState(false, "The tablet write operation update metadata " +
                 "take a long time");
         return null;
-    }
-
-    private static LogicalPlan extraceLogicalPlanWithView(LogicalPlan logicalPlan) {
-        OptExprBuilder root = extraceLogicalPlanWithView(logicalPlan.getRootBuilder());
-        return new LogicalPlan(root, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
-    }
-
-    private static OptExprBuilder extraceLogicalPlanWithView(OptExprBuilder builder) {
-        List<OptExprBuilder> inputs = Lists.newArrayList();
-        if (builder.getRoot().getOp().getEquivalentOp() != null) {
-            return new OptExprBuilder(builder.getRoot().getOp().getEquivalentOp(), inputs, builder.getExpressionMapping());
-        } else {
-            for (OptExprBuilder input : builder.getInputs()) {
-                OptExprBuilder newInput = extraceLogicalPlanWithView(input);
-                inputs.add(newInput);
-            }
-            return new OptExprBuilder(builder.getRoot().getOp(), inputs, builder.getExpressionMapping());
-        }
     }
 
     // Lock all database before analyze

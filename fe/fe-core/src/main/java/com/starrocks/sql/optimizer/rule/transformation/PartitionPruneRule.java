@@ -58,13 +58,6 @@ public class PartitionPruneRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        /*
-        if (input.getOp() instanceof LogicalViewScanOperator) {
-            return Collections.emptyList();
-        }
-
-         */
-
         LogicalOlapScanOperator logicalOlapScanOperator = (LogicalOlapScanOperator) input.getOp();
         if (logicalOlapScanOperator.getSelectedPartitionId() != null) {
             return Collections.emptyList();

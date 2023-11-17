@@ -104,8 +104,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
 
             // 1. check whether to need compensate or not
             // 2. `queryPredicateSplit` is different for each materialized view, so we can not cache it anymore.
-            // boolean isCompensatePartitionPredicate = MvUtils.isNeedCompensatePartitionPredicate(queryExpression, mvContext);
-            boolean isCompensatePartitionPredicate = true;
+            boolean isCompensatePartitionPredicate = MvUtils.isNeedCompensatePartitionPredicate(queryExpression, mvContext);
             PredicateSplit queryPredicateSplit = getQuerySplitPredicate(context, queryExpression, queryColumnRefFactory,
                     queryColumnRefRewriter, isCompensatePartitionPredicate);
             if (queryPredicateSplit == null) {

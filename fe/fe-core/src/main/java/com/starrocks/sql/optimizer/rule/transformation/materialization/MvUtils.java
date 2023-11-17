@@ -376,15 +376,6 @@ public class MvUtils {
                                                                                ColumnRefFactory columnRefFactory,
                                                                                ConnectContext connectContext,
                                                                                OptimizerConfig optimizerConfig) {
-        return getRuleOptimizedLogicalPlan(mv, sql, columnRefFactory, connectContext, optimizerConfig, false);
-    }
-
-    public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(MaterializedView mv,
-                                                                               String sql,
-                                                                               ColumnRefFactory columnRefFactory,
-                                                                               ConnectContext connectContext,
-                                                                               OptimizerConfig optimizerConfig,
-                                                                               boolean keepView) {
         StatementBase mvStmt;
         try {
             List<StatementBase> statementBases =
@@ -400,25 +391,7 @@ public class MvUtils {
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
         Pair<Table, Column> partitionInfo = mv.getBaseTableAndPartitionColumn();
         LogicalPlan logicalPlan = new RelationTransformer(
-                columnRefFactory, connectContext, keepView, partitionInfo).transformWithSelectLimit(query);
-        Optimizer optimizer = new Optimizer(optimizerConfig);
-        OptExpression optimizedPlan = optimizer.optimize(
-                connectContext,
-                logicalPlan.getRoot(),
-                new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()),
-                columnRefFactory);
-        return Pair.create(optimizedPlan, logicalPlan);
-    }
-
-    // ColumnRefFactory会冲突，是否使用新的？跟原始的query区分开
-    public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(QueryRelation query,
-                                                                               ColumnRefFactory columnRefFactory,
-                                                                               ConnectContext connectContext,
-                                                                               OptimizerConfig optimizerConfig,
-                                                                               boolean keepView) {
-        LogicalPlan logicalPlan =
-                new RelationTransformer(columnRefFactory, connectContext, keepView).transformWithSelectLimit(query);
+                columnRefFactory, connectContext, true, partitionInfo).transformWithSelectLimit(query);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(
                 connectContext,
@@ -1444,5 +1417,15 @@ public class MvUtils {
         paritionExpr.collect(SlotRef.class, slotRefs);
         Preconditions.checkState(slotRefs.size() == 1);
         return slotRefs.get(0);
+    }
+
+    public static void collectViewScanOperator(OptExpression tree, Collection<Operator> viewScanOperators) {
+        if (tree.getOp() instanceof LogicalViewScanOperator) {
+            viewScanOperators.add(tree.getOp());
+        } else {
+            for (OptExpression input : tree.getInputs()) {
+                collectViewScanOperator(input, viewScanOperators);
+            }
+        }
     }
 }

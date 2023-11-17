@@ -54,7 +54,10 @@ public class OptimizerContext {
     private boolean enableLeftRightJoinEquivalenceDerive = true;
     private final Stopwatch optimizerTimer = Stopwatch.createStarted();
 
+    // used by view based mv rewrite
+    // query's logical plan with view
     private OptExpression logicalTreeWithView;
+    // store every view's optimized logical plan
     private Map<LogicalViewScanOperator, OptExpression> viewPlanMap;
 
     @VisibleForTesting

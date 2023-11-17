@@ -1629,12 +1629,21 @@ public class MaterializedViewRewriter {
         return createUnion(queryInput, viewInput, rewriteContext);
     }
 
+    // the queryExpression may contains LogicalViewScanOperators,
+    // should replace them to view's original plan after mv rewrite
     private OptExpression replaceLogicalViewScanOperator(OptExpression queryExpression) {
         if (optimizerContext.getViewPlanMap() == null) {
             return queryExpression;
         }
+        // add a LogicalTreeAnchorOperator to replace the tree easier
         OptExpression anchorExpr = OptExpression.create(new LogicalTreeAnchorOperator(), queryExpression);
         doReplaceLogicalViewScanOperator(anchorExpr, 0, queryExpression);
+        List<Operator> viewScanOperators = Lists.newArrayList();
+        MvUtils.collectViewScanOperator(anchorExpr, viewScanOperators);
+        if (!viewScanOperators.isEmpty()) {
+            logMVRewrite(mvRewriteContext, "the query still has {} logical view scan operators", viewScanOperators.size());
+            return null;
+        }
         OptExpression newQuery = anchorExpr.inputAt(0);
         deriveLogicalProperty(newQuery);
         return newQuery;
@@ -1718,6 +1727,9 @@ public class MaterializedViewRewriter {
     protected OptExpression queryBasedRewrite(RewriteContext rewriteContext, ScalarOperator compensationPredicates,
                                               OptExpression queryExpression) {
         queryExpression = replaceLogicalViewScanOperator(queryExpression);
+        if (queryExpression == null) {
+            return null;
+        }
         // query predicate and (not viewToQueryCompensationPredicate) is the final query compensation predicate
         ScalarOperator queryCompensationPredicate = MvUtils.canonizePredicate(
                 Utils.compoundAnd(

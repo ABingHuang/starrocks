@@ -23,7 +23,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.Map;
 
+// the logical operator to scan view just like LogicalOlapScanOperator to scan olap table,
+// which is a virtual logical operator used by view based mv rewrite and has no corresponding physical operator.
+// So the final plan will never contain an operator of this type.
 public class LogicalViewScanOperator  extends LogicalScanOperator {
+    // used to construct partition predicates of mv
     private boolean hasPartitionColumn;
 
     public LogicalViewScanOperator(
