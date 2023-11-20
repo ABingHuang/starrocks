@@ -15,7 +15,6 @@
 package com.starrocks.sql;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
@@ -45,7 +44,6 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
-import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;

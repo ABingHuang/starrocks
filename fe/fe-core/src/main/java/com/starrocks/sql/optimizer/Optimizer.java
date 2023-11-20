@@ -37,8 +37,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
@@ -98,7 +96,6 @@ import com.starrocks.sql.optimizer.validate.PlanValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -557,7 +554,7 @@ public class Optimizer {
             treeWithView = OptExpression.create(new LogicalTreeAnchorOperator(), treeWithView);
             deriveLogicalProperty(treeWithView);
             ruleRewriteIterative(treeWithView, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
-            boolean isRewritten = judgeIsRewritten(treeWithView);
+            boolean isRewritten = judgeIsViewRewritten(treeWithView);
             if (isRewritten) {
                 // replace original tree plan
                 tree.setChild(0, treeWithView.inputAt(0));
@@ -571,7 +568,7 @@ public class Optimizer {
         }
     }
 
-    private boolean judgeIsRewritten(OptExpression tree) {
+    private boolean judgeIsViewRewritten(OptExpression tree) {
         List<Operator> viewScanOperators = Lists.newArrayList();
         MvUtils.collectViewScanOperator(tree, viewScanOperators);
         return viewScanOperators.size() < context.getViewPlanMap().size();
