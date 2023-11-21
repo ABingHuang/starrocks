@@ -531,7 +531,7 @@ public class Optimizer {
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
         }
 
-        if (isEnableSingleViewMvRewrite(rootTaskContext)) {
+        if (isEnableSingleViewMvRewrite()) {
             // view based mv rewrite for single view
             viewBasedMvRuleRewrite(tree, rootTaskContext);
         }
@@ -574,11 +574,11 @@ public class Optimizer {
         return viewScanOperators.size() < context.getViewPlanMap().size();
     }
 
-    private boolean isEnableSingleViewMvRewrite(TaskContext rootTaskContext) {
+    private boolean isEnableSingleViewMvRewrite() {
         return context.getLogicalTreeWithView() != null
-                && MvUtils.getAllTables(context.getLogicalTreeWithView()).size() == 1
                 && !optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)
-                && !rootTaskContext.getOptimizerContext().getCandidateMvs().isEmpty();
+                && !context.getCandidateMvs().isEmpty()
+                && context.getCandidateMvs().stream().anyMatch(MaterializationContext::isSingleTable);
     }
 
     private boolean isEnableSingleTableMVRewrite(TaskContext rootTaskContext,
