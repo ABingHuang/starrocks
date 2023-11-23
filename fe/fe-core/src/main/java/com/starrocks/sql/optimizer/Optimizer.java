@@ -136,16 +136,7 @@ public class Optimizer {
                                   PhysicalPropertySet requiredProperty,
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory) {
-        return optimize(connectContext, logicOperatorTree, requiredProperty, requiredColumns, columnRefFactory, null);
-    }
-
-    public OptExpression optimize(ConnectContext connectContext,
-                                  OptExpression logicOperatorTree,
-                                  PhysicalPropertySet requiredProperty,
-                                  ColumnRefSet requiredColumns,
-                                  ColumnRefFactory columnRefFactory,
-                                  Map<LogicalViewScanOperator, OptExpression> viewPlanMap) {
-        prepare(connectContext, logicOperatorTree, columnRefFactory, viewPlanMap, requiredColumns);
+        prepare(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
         context.setUpdateTableId(updateTableId);
 
         if (optimizerConfig.isRuleBased()) {
@@ -262,7 +253,6 @@ public class Optimizer {
             ConnectContext connectContext,
             OptExpression logicOperatorTree,
             ColumnRefFactory columnRefFactory,
-            Map<LogicalViewScanOperator, OptExpression> viewPlanMap,
             ColumnRefSet requiredColumns) {
         Memo memo = null;
         if (!optimizerConfig.isRuleBased()) {
@@ -283,7 +273,7 @@ public class Optimizer {
                     relatedMVs.addAll(preprocessor.getRelatedSyncMVs(queryTables));
                 }
                 preprocessor.prepareRelatedMVs(queryTables, relatedMVs);
-                processPlanWithView(connectContext, logicOperatorTree, columnRefFactory, viewPlanMap, requiredColumns);
+                processPlanWithView(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
             } catch (Exception e) {
                 // make sure that mvs related logicals do not influence query execution
                 LOG.warn("prepare mvs failed.", e);
@@ -299,13 +289,14 @@ public class Optimizer {
     private void processPlanWithView(ConnectContext connectContext,
                                      OptExpression logicOperatorTree,
                                      ColumnRefFactory columnRefFactory,
-                                     Map<LogicalViewScanOperator, OptExpression> viewPlanMap,
                                      ColumnRefSet requiredColumns) {
-        if (viewPlanMap == null || viewPlanMap.isEmpty()) {
+        Map<LogicalViewScanOperator, OptExpression> viewPlanMap = Maps.newHashMap();
+        // process equivalent operator，construct logical plan with view
+        OptExpression logicalPlanWithView = extractLogicalPlanWithView(logicOperatorTree, viewPlanMap);
+        if (viewPlanMap.isEmpty()) {
+            // means there is no plan with view
             return;
         }
-        // process equivalent operator，construct logical plan with view
-        OptExpression logicalPlanWithView = extractLogicalPlanWithView(logicOperatorTree);
         // optimize logical plan with view
         OptExpression optimizedPlan = optimizeViewPlan(
                 logicalPlanWithView, connectContext, requiredColumns, columnRefFactory);
@@ -338,10 +329,14 @@ public class Optimizer {
         return optimizedViewPlan;
     }
 
-    private OptExpression extractLogicalPlanWithView(OptExpression logicalTree) {
+    private OptExpression extractLogicalPlanWithView(
+            OptExpression logicalTree, Map<LogicalViewScanOperator, OptExpression> viewPlanMap) {
         List<OptExpression> inputs = Lists.newArrayList();
         if (logicalTree.getOp().getEquivalentOp() != null) {
             LogicalViewScanOperator viewScanOperator = logicalTree.getOp().getEquivalentOp().cast();
+            // collect LogicalViewScanOperator to original logical tree,
+            // which will be used in mv union rewrite
+            viewPlanMap.put(viewScanOperator, logicalTree);
             Projection projection = viewScanOperator.getProjection();
             LogicalViewScanOperator.Builder builder = new LogicalViewScanOperator.Builder();
             builder.withOperator(viewScanOperator);
@@ -354,7 +349,7 @@ public class Optimizer {
             return projectionExpr;
         } else {
             for (OptExpression input : logicalTree.getInputs()) {
-                OptExpression newInput = extractLogicalPlanWithView(input);
+                OptExpression newInput = extractLogicalPlanWithView(input, viewPlanMap);
                 inputs.add(newInput);
             }
             return OptExpression.create(logicalTree.getOp(), inputs);

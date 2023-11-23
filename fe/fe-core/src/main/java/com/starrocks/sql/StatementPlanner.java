@@ -15,7 +15,6 @@
 package com.starrocks.sql;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -42,9 +41,9 @@ import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
-import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
+import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
@@ -139,9 +138,9 @@ public class StatementPlanner {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan;
 
-        Map<LogicalViewScanOperator, OptExpression> viewPlanMap = Maps.newHashMap();
         try (Timer ignored = Tracers.watchScope("Transformer")) {
-            logicalPlan = new RelationTransformer(columnRefFactory, session, viewPlanMap).transformWithSelectLimit(query);
+            TransformerContext transformerContext = new TransformerContext(columnRefFactory, session, false);
+            logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
         }
 
         OptExpression optimizedPlan;
@@ -153,8 +152,7 @@ public class StatementPlanner {
                     logicalPlan.getRoot(),
                     new PhysicalPropertySet(),
                     new ColumnRefSet(logicalPlan.getOutputColumn()),
-                    columnRefFactory,
-                    viewPlanMap);
+                    columnRefFactory);
         }
         try (Timer ignored = Tracers.watchScope("ExecPlanBuild")) {
             // 3. Build fragment exec plan
@@ -202,10 +200,10 @@ public class StatementPlanner {
                 unLock(dbs);
             }
 
-            Map<LogicalViewScanOperator, OptExpression> viewPlanMap = Maps.newHashMap();
             LogicalPlan logicalPlan;
             try (Timer ignored = Tracers.watchScope("Transformer")) {
-                logicalPlan = new RelationTransformer(columnRefFactory, session, viewPlanMap).transformWithSelectLimit(query);
+                TransformerContext transformerContext = new TransformerContext(columnRefFactory, session, false);
+                logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
             }
 
             OptExpression optimizedPlan;
@@ -217,8 +215,7 @@ public class StatementPlanner {
                         logicalPlan.getRoot(),
                         new PhysicalPropertySet(),
                         new ColumnRefSet(logicalPlan.getOutputColumn()),
-                        columnRefFactory,
-                        viewPlanMap);
+                        columnRefFactory);
             }
             try (Timer ignored = Tracers.watchScope("ExecPlanBuild")) {
                 // 3. Build fragment exec plan

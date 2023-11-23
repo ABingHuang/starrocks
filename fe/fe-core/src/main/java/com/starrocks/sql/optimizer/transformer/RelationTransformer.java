@@ -72,7 +72,6 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.JoinHelper;
-import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.SubqueryUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -122,6 +121,8 @@ import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import org.apache.commons.lang3.tuple.Triple;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -137,6 +138,8 @@ import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMapping> {
+    private static final Logger LOG = LogManager.getLogger(RelationTransformer.class);
+
     private final ColumnRefFactory columnRefFactory;
     private final ConnectContext session;
 
@@ -144,46 +147,26 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
     private final CTETransformerContext cteContext;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
     private final boolean keepView;
+    private final boolean enableViewBasedMvRewrite;
 
-    private final Map<LogicalViewScanOperator, OptExpression> viewPlanMap;
-
-    // TODO: refactor these constructor
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session) {
-        this(columnRefFactory, session, false);
-    }
-
-    public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
-                               Map<LogicalViewScanOperator, OptExpression> viewPlanMap) {
-        this(columnRefFactory, session, new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit()),
-                false, viewPlanMap);
-    }
-
-    public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, boolean keepView) {
         this(columnRefFactory, session,
                 new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit()), keepView, null);
+                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit()));
     }
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer,
                                CTETransformerContext cteContext) {
-        this(columnRefFactory, session, outer, cteContext, false, null);
+        this(new TransformerContext(columnRefFactory, session, outer, cteContext));
     }
 
-    public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer,
-                               CTETransformerContext cteContext, boolean keepView) {
-        this(columnRefFactory, session, outer, cteContext, keepView, null);
-    }
-
-    public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer,
-                               CTETransformerContext cteContext, boolean keepView,
-                               Map<LogicalViewScanOperator, OptExpression> viewPlanMap) {
-        this.columnRefFactory = columnRefFactory;
-        this.session = session;
-        this.outer = outer;
-        this.cteContext = cteContext;
-        this.keepView = keepView;
-        this.viewPlanMap = viewPlanMap;
+    public RelationTransformer(TransformerContext context) {
+        this.columnRefFactory = context.getColumnRefFactory();
+        this.session = context.getSession();
+        this.outer = context.getOuter();
+        this.cteContext = context.getCteContext();
+        this.keepView = context.isKeepView();
+        this.enableViewBasedMvRewrite = context.isEnableViewBasedMvRewrite();
     }
 
     // transform relation to plan with session variable sql_select_limit
@@ -267,7 +250,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
     @Override
     public LogicalPlan visitSelect(SelectRelation node, ExpressionMapping context) {
-        return new QueryTransformer(columnRefFactory, session, cteContext, keepView, viewPlanMap).plan(node, outer);
+        return new QueryTransformer(columnRefFactory, session, cteContext, keepView).plan(node, outer);
     }
 
     @Override
@@ -689,13 +672,10 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     logicalPlan.getRoot().getOp(),
                     logicalPlan.getRootBuilder().getInputs(),
                     new ExpressionMapping(node.getScope(), logicalPlan.getOutputColumn()));
-            LogicalPlan viewLogicalPlan = new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
-            if (viewPlanMap != null) {
-                // TODO: add a session variable to control this
+            if (enableViewBasedMvRewrite) {
                 builder.getRoot().getOp().setEquivalentOp(viewScanOperator);
-                viewPlanMap.put(viewScanOperator, viewLogicalPlan.getRoot());
             }
-            return viewLogicalPlan;
+            return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
         }
     }
 

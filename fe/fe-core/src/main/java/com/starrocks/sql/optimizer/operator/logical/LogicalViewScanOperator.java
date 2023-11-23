@@ -23,7 +23,6 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
-import java.util.List;
 import java.util.Map;
 
 // the logical operator to scan view just like LogicalOlapScanOperator to scan olap table,

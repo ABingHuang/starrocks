@@ -26,8 +26,6 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
@@ -37,7 +35,6 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.SubqueryUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -49,7 +46,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -71,16 +67,13 @@ class QueryTransformer {
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
     private final CTETransformerContext cteContext;
     private final boolean keepView;
-    private final Map<LogicalViewScanOperator, OptExpression> viewPlanMap;
 
     public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
-                            CTETransformerContext cteContext, boolean keepView,
-                            Map<LogicalViewScanOperator, OptExpression> viewPlanMap) {
+                            CTETransformerContext cteContext, boolean keepView) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.cteContext = cteContext;
         this.keepView = keepView;
-        this.viewPlanMap = viewPlanMap;
     }
 
     public LogicalPlan plan(SelectRelation queryBlock, ExpressionMapping outer) {
@@ -163,10 +156,13 @@ class QueryTransformer {
         // This must be a copy of the context, because the new Relation may contain cte with the same name,
         // and the internal cte with the same name will overwrite the original mapping
         CTETransformerContext newCteContext = new CTETransformerContext(cteContext);
-        return new RelationTransformer(columnRefFactory, session,
+        TransformerContext transformerContext = new TransformerContext(
+                columnRefFactory,
+                session,
                 new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                newCteContext, keepView, viewPlanMap)
-                .visit(node).getRootBuilder();
+                newCteContext,
+                keepView);
+        return new RelationTransformer(transformerContext).visit(node).getRootBuilder();
     }
 
     private OptExprBuilder projectForOrder(OptExprBuilder subOpt,

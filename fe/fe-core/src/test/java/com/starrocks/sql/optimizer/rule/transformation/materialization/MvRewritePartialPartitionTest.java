@@ -897,7 +897,6 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     " values(\"varchar12\", '1991-03-30', 2, 2, 1)");
             String query5 = "select * from view_with_expr";
             String plan5 = getFragmentPlan(query5);
-            System.out.println(plan5);
             PlanTestBase.assertContains(plan5, "mv_on_view_1");
             PlanTestBase.assertContains(plan5, "UNION",
                     "((17: date_trunc < '1991-04-01') OR (17: date_trunc >= '1991-04-03')) OR (17: date_trunc IS NULL)");
