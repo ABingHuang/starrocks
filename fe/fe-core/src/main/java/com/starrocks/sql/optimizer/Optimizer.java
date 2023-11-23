@@ -89,7 +89,6 @@ import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PushDownSubfieldRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
-import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.validate.MVRewriteValidator;
 import com.starrocks.sql.optimizer.validate.OptExpressionValidator;
 import com.starrocks.sql.optimizer.validate.PlanValidator;
@@ -145,7 +144,7 @@ public class Optimizer {
                                   PhysicalPropertySet requiredProperty,
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory,
-                                  Map<LogicalViewScanOperator, LogicalPlan> viewPlanMap) {
+                                  Map<LogicalViewScanOperator, OptExpression> viewPlanMap) {
         prepare(connectContext, logicOperatorTree, columnRefFactory, viewPlanMap, requiredColumns);
         context.setUpdateTableId(updateTableId);
 
@@ -263,7 +262,7 @@ public class Optimizer {
             ConnectContext connectContext,
             OptExpression logicOperatorTree,
             ColumnRefFactory columnRefFactory,
-            Map<LogicalViewScanOperator, LogicalPlan> viewPlanMap,
+            Map<LogicalViewScanOperator, OptExpression> viewPlanMap,
             ColumnRefSet requiredColumns) {
         Memo memo = null;
         if (!optimizerConfig.isRuleBased()) {
@@ -300,7 +299,7 @@ public class Optimizer {
     private void processPlanWithView(ConnectContext connectContext,
                                      OptExpression logicOperatorTree,
                                      ColumnRefFactory columnRefFactory,
-                                     Map<LogicalViewScanOperator, LogicalPlan> viewPlanMap,
+                                     Map<LogicalViewScanOperator, OptExpression> viewPlanMap,
                                      ColumnRefSet requiredColumns) {
         if (viewPlanMap == null || viewPlanMap.isEmpty()) {
             return;
@@ -314,13 +313,12 @@ public class Optimizer {
 
         Map<LogicalViewScanOperator, OptExpression> optimizedViewPlanMap = Maps.newHashMap();
         for (LogicalViewScanOperator viewScanOperator : viewPlanMap.keySet()) {
-            LogicalPlan viewLogicalPlan = viewPlanMap.get(viewScanOperator);
-            OptExpression viewLogicalTree = viewLogicalPlan.getRoot();
+            OptExpression viewLogicalTree = viewPlanMap.get(viewScanOperator);
             // optimize logical tree of view and keep them in OptimizerContext,
             // which will be used in union rewrite.
             // use LogicalPlan here to get output columns in sequence
             OptExpression optimizedViewPlan = optimizeViewPlan(
-                    viewLogicalTree, connectContext, new ColumnRefSet(viewLogicalPlan.getOutputColumn()), columnRefFactory);
+                    viewLogicalTree, connectContext, viewScanOperator.getOutputColumnSet(), columnRefFactory);
             optimizedViewPlanMap.put(viewScanOperator, optimizedViewPlan);
         }
         context.setViewPlanMap(optimizedViewPlanMap);

@@ -37,6 +37,7 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.SubqueryUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -70,17 +71,15 @@ class QueryTransformer {
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
     private final CTETransformerContext cteContext;
     private final boolean keepView;
-    private final Pair<Table, Column> partitionInfo;
-    private final Map<LogicalViewScanOperator, LogicalPlan> viewPlanMap;
+    private final Map<LogicalViewScanOperator, OptExpression> viewPlanMap;
 
     public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
-                            CTETransformerContext cteContext, boolean keepView, Pair<Table, Column> partitionInfo,
-                            Map<LogicalViewScanOperator, LogicalPlan> viewPlanMap) {
+                            CTETransformerContext cteContext, boolean keepView,
+                            Map<LogicalViewScanOperator, OptExpression> viewPlanMap) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.cteContext = cteContext;
         this.keepView = keepView;
-        this.partitionInfo = partitionInfo;
         this.viewPlanMap = viewPlanMap;
     }
 
@@ -166,7 +165,7 @@ class QueryTransformer {
         CTETransformerContext newCteContext = new CTETransformerContext(cteContext);
         return new RelationTransformer(columnRefFactory, session,
                 new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                newCteContext, keepView, partitionInfo, viewPlanMap)
+                newCteContext, keepView, viewPlanMap)
                 .visit(node).getRootBuilder();
     }
 

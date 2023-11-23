@@ -1878,7 +1878,7 @@ public class MaterializedViewRewriter {
             IsNullPredicateOperator isNotNullPredicateOperator = new IsNullPredicateOperator(true, partitionColumnRef);
             List<ScalarOperator> predicates = Utils.extractConjuncts(queryCompensationPredicate);
             List<ScalarOperator> partitionRelatedPredicates = predicates.stream()
-                    .filter(predicate -> isRelatedPredicate(predicate, partitionColumns.get(0).getName()))
+                    .filter(predicate -> isRelatedPredicate(predicate, partitionColumnRef.getName()))
                     .collect(Collectors.toList());
             predicates.removeAll(partitionRelatedPredicates);
             if (partitionRelatedPredicates.contains(isNullPredicateOperator)

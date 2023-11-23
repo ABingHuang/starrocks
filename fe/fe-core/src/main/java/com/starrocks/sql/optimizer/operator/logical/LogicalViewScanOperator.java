@@ -14,38 +14,54 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
+import java.util.List;
 import java.util.Map;
 
 // the logical operator to scan view just like LogicalOlapScanOperator to scan olap table,
 // which is a virtual logical operator used by view based mv rewrite and has no corresponding physical operator.
 // So the final plan will never contain an operator of this type.
 public class LogicalViewScanOperator  extends LogicalScanOperator {
-    // used to construct partition predicates of mv
-    private boolean hasPartitionColumn;
+    private ColumnRefSet outputColumnSet;
+    private Map<Expr, ColumnRefOperator> expressionToColumns;
+
+    // add output mapping from new column to original column
+    // used to construct partition predicates
+    private Map<ColumnRefOperator, ColumnRefOperator> columnRefOperatorMap;
 
     public LogicalViewScanOperator(
             Table table,
             Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
             Map<Column, ColumnRefOperator> columnMetaToColRefMap,
-            boolean hasPartitionColumn) {
+            ColumnRefSet outputColumnSet,
+            Map<Expr, ColumnRefOperator> expressionToColumns) {
         super(OperatorType.LOGICAL_VIEW_SCAN, table, colRefToColumnMetaMap,
                 columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null, null);
-        this.hasPartitionColumn = hasPartitionColumn;
+        this.outputColumnSet = outputColumnSet;
+        this.expressionToColumns = expressionToColumns;
     }
 
     private LogicalViewScanOperator() {
         super(OperatorType.LOGICAL_VIEW_SCAN);
     }
 
-    public boolean isHasPartitionColumn() {
-        return hasPartitionColumn;
+    public ColumnRefOperator getExpressionMapping(Expr expr) {
+        if (expressionToColumns == null) {
+            return null;
+        }
+        return expressionToColumns.get(expr);
+    }
+
+    public ColumnRefSet getOutputColumnSet() {
+        return outputColumnSet;
     }
 
     @Override
@@ -67,7 +83,8 @@ public class LogicalViewScanOperator  extends LogicalScanOperator {
         @Override
         public LogicalViewScanOperator.Builder withOperator(LogicalViewScanOperator scanOperator) {
             super.withOperator(scanOperator);
-            builder.hasPartitionColumn = scanOperator.hasPartitionColumn;
+            builder.expressionToColumns = scanOperator.expressionToColumns;
+            builder.outputColumnSet = scanOperator.outputColumnSet;
             return this;
         }
     }

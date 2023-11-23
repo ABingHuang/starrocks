@@ -391,7 +391,7 @@ public class MvUtils {
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
         Pair<Table, Column> partitionInfo = mv.getBaseTableAndPartitionColumn();
         LogicalPlan logicalPlan = new RelationTransformer(
-                columnRefFactory, connectContext, true, partitionInfo).transformWithSelectLimit(query);
+                columnRefFactory, connectContext, true).transformWithSelectLimit(query);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(
                 connectContext,
@@ -992,6 +992,9 @@ public class MvUtils {
         if (scanOperators.isEmpty()) {
             return false;
         }
+        if (scanOperators.stream().anyMatch(scan -> scan instanceof LogicalViewScanOperator)) {
+            return true;
+        }
 
         // If no partition table and columns, no need compensate
         MaterializedView mv = mvContext.getMv();
@@ -1171,19 +1174,20 @@ public class MvUtils {
 
         Column partitionColumn = partitionTableAndColumns.second;
         List<OptExpression> scanExprs = MvUtils.collectScanExprs(mvPlan);
+        Expr partitionExpr = mv.getFirstPartitionRefTableExpr();
         for (OptExpression scanExpr : scanExprs) {
             LogicalScanOperator scanOperator = (LogicalScanOperator) scanExpr.getOp();
-            if (scanOperator instanceof LogicalViewScanOperator) {
-                LogicalViewScanOperator viewScanOperator = scanOperator.cast();
-                if (!viewScanOperator.isHasPartitionColumn()) {
-                    continue;
-                }
-            } else if (!isRefBaseTable(scanOperator, refBaseTable)) {
+            if (!isRefBaseTable(scanOperator, refBaseTable)) {
                 continue;
             }
-
-            Optional<ColumnRefOperator> columnRefOption = scanOperator.getColRefToColumnMetaMap().keySet().stream()
-                    .filter(column -> column.getName().equalsIgnoreCase(partitionColumn.getName())).findFirst();
+            Optional<ColumnRefOperator> columnRefOption = Optional.empty();
+            if (scanOperator instanceof LogicalViewScanOperator) {
+                LogicalViewScanOperator viewScanOperator = scanOperator.cast();
+                columnRefOption = Optional.ofNullable(viewScanOperator.getExpressionMapping(partitionExpr));
+            } else {
+                columnRefOption = scanOperator.getColRefToColumnMetaMap().keySet().stream()
+                        .filter(column -> column.getName().equalsIgnoreCase(partitionColumn.getName())).findFirst();
+            }
             if (!columnRefOption.isPresent()) {
                 continue;
             }
@@ -1198,6 +1202,9 @@ public class MvUtils {
         Table scanTable = scanOperator.getTable();
         if (scanTable.isNativeTableOrMaterializedView() && !scanTable.equals(refBaseTable)) {
             return false;
+        }
+        if (scanOperator instanceof LogicalViewScanOperator) {
+            return true;
         }
         if (!scanTable.isNativeTableOrMaterializedView() && !scanTable.getTableIdentifier().equals(
                 refBaseTable.getTableIdentifier())) {

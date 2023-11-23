@@ -139,7 +139,7 @@ public class StatementPlanner {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan;
 
-        Map<LogicalViewScanOperator, LogicalPlan> viewPlanMap = Maps.newHashMap();
+        Map<LogicalViewScanOperator, OptExpression> viewPlanMap = Maps.newHashMap();
         try (Timer ignored = Tracers.watchScope("Transformer")) {
             logicalPlan = new RelationTransformer(columnRefFactory, session, viewPlanMap).transformWithSelectLimit(query);
         }
@@ -202,7 +202,7 @@ public class StatementPlanner {
                 unLock(dbs);
             }
 
-            Map<LogicalViewScanOperator, LogicalPlan> viewPlanMap = Maps.newHashMap();
+            Map<LogicalViewScanOperator, OptExpression> viewPlanMap = Maps.newHashMap();
             LogicalPlan logicalPlan;
             try (Timer ignored = Tracers.watchScope("Transformer")) {
                 logicalPlan = new RelationTransformer(columnRefFactory, session, viewPlanMap).transformWithSelectLimit(query);
