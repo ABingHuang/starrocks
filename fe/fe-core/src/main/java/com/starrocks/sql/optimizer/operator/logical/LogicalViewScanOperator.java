@@ -24,11 +24,13 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.Map;
+import java.util.Objects;
 
 // the logical operator to scan view just like LogicalOlapScanOperator to scan olap table,
 // which is a virtual logical operator used by view based mv rewrite and has no corresponding physical operator.
 // So the final plan will never contain an operator of this type.
 public class LogicalViewScanOperator  extends LogicalScanOperator {
+    private int relationId;
     private ColumnRefSet outputColumnSet;
     private Map<Expr, ColumnRefOperator> expressionToColumns;
 
@@ -37,6 +39,7 @@ public class LogicalViewScanOperator  extends LogicalScanOperator {
     private Map<ColumnRefOperator, ColumnRefOperator> columnRefOperatorMap;
 
     public LogicalViewScanOperator(
+            int relationId,
             Table table,
             Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
             Map<Column, ColumnRefOperator> columnMetaToColRefMap,
@@ -44,6 +47,7 @@ public class LogicalViewScanOperator  extends LogicalScanOperator {
             Map<Expr, ColumnRefOperator> expressionToColumns) {
         super(OperatorType.LOGICAL_VIEW_SCAN, table, colRefToColumnMetaMap,
                 columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null, null);
+        this.relationId = relationId;
         this.outputColumnSet = outputColumnSet;
         this.expressionToColumns = expressionToColumns;
     }
@@ -61,6 +65,23 @@ public class LogicalViewScanOperator  extends LogicalScanOperator {
 
     public ColumnRefSet getOutputColumnSet() {
         return outputColumnSet;
+    }
+
+    public int getRelationId() {
+        return relationId;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        LogicalViewScanOperator that = (LogicalViewScanOperator) o;
+        return relationId == that.relationId;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(relationId);
     }
 
     @Override
@@ -82,6 +103,7 @@ public class LogicalViewScanOperator  extends LogicalScanOperator {
         @Override
         public LogicalViewScanOperator.Builder withOperator(LogicalViewScanOperator scanOperator) {
             super.withOperator(scanOperator);
+            builder.relationId = scanOperator.relationId;
             builder.expressionToColumns = scanOperator.expressionToColumns;
             builder.outputColumnSet = scanOperator.outputColumnSet;
             return this;

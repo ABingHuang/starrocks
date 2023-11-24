@@ -718,7 +718,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             newExprMapping.put(entry.getKey(), projectionMap.get(entry.getValue()).cast());
         }
 
-        LogicalViewScanOperator scanOperator = new LogicalViewScanOperator(
+        LogicalViewScanOperator scanOperator = new LogicalViewScanOperator(relationId,
                 node.getView(), columnRefOperatorToColumn, columnMetaToColRefMap,
                 new ColumnRefSet(logicalPlan.getOutputColumn()), newExprMapping);
         if (!keepView) {

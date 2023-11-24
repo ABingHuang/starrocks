@@ -343,7 +343,7 @@ public class Optimizer {
             builder.setProjection(null);
             LogicalViewScanOperator clone = builder.build();
             OptExpression viewScanExpr = OptExpression.create(clone);
-            // should add projection to a new projectionExpr to make predicate pushdown rules work right
+            // should add a projection to make predicate pushdown rules work right
             LogicalProjectOperator projectOperator = new LogicalProjectOperator(projection.getColumnRefMap());
             OptExpression projectionExpr = OptExpression.create(projectOperator, viewScanExpr);
             return projectionExpr;

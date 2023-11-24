@@ -1651,8 +1651,24 @@ public class MaterializedViewRewriter {
 
     private void doReplaceLogicalViewScanOperator(OptExpression parent, int index, OptExpression queryExpression) {
         Map<LogicalViewScanOperator, OptExpression> viewPlanMap = optimizerContext.getViewPlanMap();
-        if (viewPlanMap.containsKey(queryExpression.getOp())) {
-            parent.setChild(index, viewPlanMap.get(queryExpression.getOp()));
+        LogicalOperator op = queryExpression.getOp().cast();
+        if (op instanceof LogicalViewScanOperator) {
+            if (!viewPlanMap.containsKey(op)) {
+                LogicalViewScanOperator viewScanOperator = op.cast();
+                logMVRewrite(mvRewriteContext, "invalid view scan operator, view:{}, relationId:",
+                        viewScanOperator.getTable().getName(), viewScanOperator.getRelationId());
+                return;
+            }
+            OptExpression viewPlan = viewPlanMap.get(op);
+            /*if (op.getPredicate() != null) {
+                // update predicates
+                Operator.Builder builder = OperatorBuilderFactory.build(viewPlan.getOp());
+                builder.withOperator(viewPlan.getOp());
+                builder.setPredicate(Utils.compoundAnd(viewPlan.getOp().getPredicate(), op.getPredicate()));
+                Operator newOperator = builder.build();
+                viewPlan = OptExpression.create(newOperator, viewPlan.getInputs());
+            }*/
+            parent.setChild(index, viewPlan);
         } else {
             for (int i = 0; i < queryExpression.getInputs().size(); i++) {
                 doReplaceLogicalViewScanOperator(queryExpression, i, queryExpression.inputAt(i));
