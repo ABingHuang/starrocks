@@ -274,7 +274,10 @@ public class Optimizer {
                     relatedMVs.addAll(preprocessor.getRelatedSyncMVs(queryTables));
                 }
                 preprocessor.prepareRelatedMVs(queryTables, relatedMVs);
-                processPlanWithView(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
+                if (!relatedMVs.isEmpty()) {
+                    // if related mvs is empty, no need to process plans with view
+                    processPlanWithView(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
+                }
             } catch (Exception e) {
                 // make sure that mvs related logicals do not influence query execution
                 LOG.warn("prepare mvs failed.", e);
