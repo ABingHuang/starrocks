@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -336,7 +337,9 @@ public class Optimizer {
             LogicalViewScanOperator viewScanOperator = logicalTree.getOp().getEquivalentOp().cast();
             // collect LogicalViewScanOperator to original logical tree,
             // which will be used in mv union rewrite
-            viewPlanMap.put(viewScanOperator, logicalTree);
+            // should use cloned plan because the following optimizeViewPlan will change the plan
+            OptExpression clonePlan = cloneExpression(logicalTree);
+            viewPlanMap.put(viewScanOperator, clonePlan);
             Projection projection = viewScanOperator.getProjection();
             LogicalViewScanOperator.Builder builder = new LogicalViewScanOperator.Builder();
             builder.withOperator(viewScanOperator);
@@ -354,6 +357,18 @@ public class Optimizer {
             }
             return OptExpression.create(logicalTree.getOp(), inputs);
         }
+    }
+
+    private OptExpression cloneExpression(OptExpression logicalTree) {
+        List<OptExpression> inputs = Lists.newArrayList();
+        for (OptExpression input : logicalTree.getInputs()) {
+            OptExpression clone = cloneExpression(input);
+            inputs.add(clone);
+        }
+        Operator.Builder builder = OperatorBuilderFactory.build(logicalTree.getOp());
+        builder.withOperator(logicalTree.getOp());
+        Operator newOp = builder.build();
+        return OptExpression.create(newOp, inputs);
     }
 
     private void pruneTables(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {

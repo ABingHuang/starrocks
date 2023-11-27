@@ -186,12 +186,15 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
             testRewriteOK(mv, query);
         }
         {
+            String mv = "select * from view_q1 ";
+            String query = "select * from view_q1;";
+            testRewriteOK(mv, query);
+        }
+        {
             String mv = "select *  from view_q1";
             String query = "select l_returnflag, l_shipdate, sum(sum_qty) from view_q1 group by l_returnflag, l_shipdate;";
             testRewriteOK(mv, query);
         }
-
-
         {
             String mv = "select * from view_q2";
             String query = "select * from view_q2 order by\n" +
