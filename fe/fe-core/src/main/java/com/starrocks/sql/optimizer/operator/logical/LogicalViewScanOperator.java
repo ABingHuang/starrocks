@@ -73,8 +73,12 @@ public class LogicalViewScanOperator  extends LogicalScanOperator {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
         LogicalViewScanOperator that = (LogicalViewScanOperator) o;
         return relationId == that.relationId;
     }
