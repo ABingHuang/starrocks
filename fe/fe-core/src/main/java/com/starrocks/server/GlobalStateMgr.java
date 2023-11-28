@@ -1940,7 +1940,6 @@ public class GlobalStateMgr {
         long startTime = System.currentTimeMillis();
         long lineCnt = 0;
         while (true) {
-            Thread.sleep(1000);
             JournalEntity entity = null;
             try {
                 entity = cursor.next();

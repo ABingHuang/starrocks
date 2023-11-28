@@ -465,7 +465,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableDeliverBatchFragments = true;
 
     @VariableMgr.VarAttr(name = META_REPLAY_SLEEP_TIME_MS)
-    private long metaReplaySleepTimeMs  = 1000;
+    private long metaReplaySleepTimeMs  = 0;
 
     /**
      * Determines whether to enable query tablet affinity. When enabled, attempts to schedule
