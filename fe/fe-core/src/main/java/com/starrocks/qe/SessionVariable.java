@@ -172,6 +172,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_DELIVER_BATCH_FRAGMENTS = "enable_deliver_batch_fragments";
 
+    public static final String META_REPLAY_SLEEP_TIME_MS = "meta_replay_sleep_time_ms";
+
     public static final String ENABLE_QUERY_TABLET_AFFINITY = "enable_query_tablet_affinity";
 
     // Use resource group. It will influence the CPU schedule, I/O scheduler, and
@@ -461,6 +463,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     @VariableMgr.VarAttr(name = ENABLE_DELIVER_BATCH_FRAGMENTS)
     private boolean enableDeliverBatchFragments = true;
+
+    @VariableMgr.VarAttr(name = META_REPLAY_SLEEP_TIME_MS)
+    private long metaReplaySleepTimeMs  = 1000;
 
     /**
      * Determines whether to enable query tablet affinity. When enabled, attempts to schedule
@@ -1151,6 +1156,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getLoadMemLimit() {
         return loadMemLimit;
+    }
+
+    public long getMetaReplaySleepTimeMs() {
+        return metaReplaySleepTimeMs;
+    }
+
+    public void setMetaReplaySleepTimeMs(long metaReplaySleepTimeMs) {
+        this.metaReplaySleepTimeMs = metaReplaySleepTimeMs;
     }
 
     public int getQueryTimeoutS() {
