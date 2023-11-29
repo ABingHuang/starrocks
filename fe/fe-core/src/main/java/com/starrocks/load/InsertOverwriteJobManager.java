@@ -139,8 +139,8 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
 
     public void replayInsertOverwriteStateChange(InsertOverwriteStateChangeInfo info) {
         try {
-            Thread.sleep(ConnectContext.get().getSessionVariable().getMetaReplaySleepTimeMs());
-        } catch (InterruptedException e) {
+            Thread.sleep(1000);
+        } catch (Exception e) {
             e.printStackTrace();
         }
         InsertOverwriteJob job = getInsertOverwriteJob(info.getJobId());
