@@ -139,7 +139,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
 
     public void replayInsertOverwriteStateChange(InsertOverwriteStateChangeInfo info) {
         try {
-            Thread.sleep(5000);
+            Thread.sleep(15000);
         } catch (Exception e) {
             e.printStackTrace();
         }
