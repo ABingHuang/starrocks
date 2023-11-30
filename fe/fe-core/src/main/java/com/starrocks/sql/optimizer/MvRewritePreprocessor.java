@@ -255,7 +255,11 @@ public class MvRewritePreprocessor {
             if (!partitionNamesToRefresh.isEmpty()) {
                 StringBuilder sb = new StringBuilder();
                 for (BaseTableInfo base : mv.getBaseTableInfos()) {
-                    String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTable()));
+                    Table baseTable = base.getTable();
+                    if (baseTable.isView()) {
+                        continue;
+                    }
+                    String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(baseTable));
                     sb.append(String.format("base table %s version: %s; ", base, versionInfo));
                 }
                 logMVPrepare(connectContext, mv, "MV {} is outdated, stale partitions {}, detailed version info: {}",
