@@ -217,6 +217,7 @@ public class RuleSet {
                 PushDownLimitDirectRule.CTE_CONSUME,
                 MergeLimitDirectRule.AGGREGATE,
                 MergeLimitDirectRule.OLAP_SCAN,
+                MergeLimitDirectRule.VIEW_SCAN,
                 MergeLimitDirectRule.HIVE_SCAN,
                 MergeLimitDirectRule.ICEBERG_SCAN,
                 MergeLimitDirectRule.HUDI_SCAN,

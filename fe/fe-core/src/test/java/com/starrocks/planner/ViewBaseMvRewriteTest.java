@@ -182,6 +182,11 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
 
         {
             String mv = "select * from view_q1 ";
+            String query = "select * from view_q1 limit 10;";
+            testRewriteOK(mv, query);
+        }
+        {
+            String mv = "select * from view_q1 ";
             String query = "select * from view_q1 where l_shipdate <= date '1998-12-01';";
             testRewriteOK(mv, query);
         }

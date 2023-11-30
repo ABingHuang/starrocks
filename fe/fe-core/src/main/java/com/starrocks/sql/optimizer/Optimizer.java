@@ -326,8 +326,6 @@ public class Optimizer {
             ColumnRefSet requiredColumns,
             ColumnRefFactory columnRefFactory) {
         OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
-        optimizerConfig.disableRule(RuleType.TF_PUSH_DOWN_LIMIT);
-        optimizerConfig.disableRule(RuleType.TF_SPLIT_LIMIT);
         optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
         optimizerConfig.disableRuleSet(RuleSetType.MULTI_TABLE_MV_REWRITE);
         Optimizer optimizer = new Optimizer(optimizerConfig);
