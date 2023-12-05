@@ -22,9 +22,10 @@ public class MvPlanContextBuilder {
     public MvPlanContext getPlanContext(MaterializedView mv) {
         // build mv query logical plan
         MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
-        ConnectContext connectContext = new ConnectContext();
+        /*ConnectContext connectContext = new ConnectContext();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(
-                ConnectContext.get().getSessionVariable().getOptimizerExecuteTimeout());
-        return mvOptimizer.optimize(mv, connectContext);
+                ConnectContext.get().getSessionVariable().getOptimizerExecuteTimeout());*/
+        ConnectContext currentContext = ConnectContext.get();
+        return mvOptimizer.optimize(mv, currentContext);
     }
 }
