@@ -424,7 +424,7 @@ public class MaterializedViewAnalyzer {
                 }
 
                 if (!column.getType().canBeMVKey()) {
-                    break;
+                    continue;
                 }
 
                 if (column.getType().getPrimitiveType() == PrimitiveType.VARCHAR) {
