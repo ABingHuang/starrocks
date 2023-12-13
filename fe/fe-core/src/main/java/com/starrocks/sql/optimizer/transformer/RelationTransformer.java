@@ -715,7 +715,11 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         Map<Expr, ColumnRefOperator> newExprMapping = Maps.newHashMap();
         // construct a mapping from output expr to output columns of view
         for (Map.Entry<Expr, ColumnRefOperator> entry : exprMapping.entrySet()) {
-            newExprMapping.put(entry.getKey(), projectionMap.get(entry.getValue()).cast());
+            if (projectionMap.containsKey(entry.getValue())) {
+                newExprMapping.put(entry.getKey(), projectionMap.get(entry.getValue()).cast());
+            } else {
+                newExprMapping.put(entry.getKey(), entry.getValue());
+            }
         }
 
         LogicalViewScanOperator scanOperator = new LogicalViewScanOperator(relationId,
