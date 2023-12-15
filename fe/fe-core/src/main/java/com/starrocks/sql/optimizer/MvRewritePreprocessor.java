@@ -120,7 +120,7 @@ public class MvRewritePreprocessor {
             } catch (Exception e) {
                 // TODO: MV's prepare should not affect query's process which maybe caused by MV's concurrent process.
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
-                LOG.warn("Prepare query tables {} for mv failed: {}", tableNames, e);
+                LOG.warn("Prepare query tables {} for mv failed", tableNames, e);
                 throw e;
             }
         }
@@ -259,35 +259,44 @@ public class MvRewritePreprocessor {
         // filter mvs which are active and have valid plans
         Set<Pair<MaterializedView, MvPlanContext>> filteredMVs = Sets.newHashSet();
         for (MaterializedView mv : relatedMVs) {
-            if (!mv.isActive()) {
-                logMVPrepare(connectContext, mv, "MV is not active: {}", mv.getName());
-                continue;
+            try {
+                checkMv(mv, connectContext, filteredMVs);
+            } catch (Exception e) {
+                LOG.warn("prepare mv:{} failed", mv.getName(), e);
             }
-
-            MvPlanContext mvPlanContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv,
-                    connectContext.getSessionVariable().isEnableMaterializedViewPlanCache());
-            if (mvPlanContext == null) {
-                logMVPrepare(connectContext, mv, "MV plan is not valid: {}, cannot generate plan for rewrite",
-                        mv.getName());
-                continue;
-            }
-            if (!mvPlanContext.isValidMvPlan()) {
-                if (mvPlanContext.getLogicalPlan() != null) {
-                    logMVPrepare(connectContext, mv, "MV plan is not valid: {}, plan:\n {}",
-                            mv.getName(), mvPlanContext.getLogicalPlan().debugString());
-                } else {
-                    logMVPrepare(connectContext, mv, "MV plan is not valid: {}",
-                            mv.getName());
-                }
-                continue;
-            }
-
-            filteredMVs.add(Pair.create(mv, mvPlanContext));
         }
         if (filteredMVs.isEmpty()) {
             logMVPrepare(connectContext, "There are no valid related mvs for the query plan");
         }
         return filteredMVs;
+    }
+
+    private static void checkMv(
+            MaterializedView mv,
+            ConnectContext connectContext,
+            Set<Pair<MaterializedView, MvPlanContext>> filteredMVs) {
+        if (!mv.isActive()) {
+            logMVPrepare(connectContext, mv, "MV is not active: {}", mv.getName());
+            return;
+        }
+        MvPlanContext mvPlanContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv,
+                connectContext.getSessionVariable().isEnableMaterializedViewPlanCache());
+        if (mvPlanContext == null) {
+            logMVPrepare(connectContext, mv, "MV plan is not valid: {}, cannot generate plan for rewrite",
+                    mv.getName());
+            return;
+        }
+        if (!mvPlanContext.isValidMvPlan()) {
+            if (mvPlanContext.getLogicalPlan() != null) {
+                logMVPrepare(connectContext, mv, "MV plan is not valid: {}, plan:\n {}",
+                        mv.getName(), mvPlanContext.getLogicalPlan().debugString());
+            } else {
+                logMVPrepare(connectContext, mv, "MV plan is not valid: {}",
+                        mv.getName());
+            }
+            return;
+        }
+        filteredMVs.add(Pair.create(mv, mvPlanContext));
     }
 
     private static Set<MaterializedView> getRelatedAsyncMVs(ConnectContext connectContext,
