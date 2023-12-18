@@ -393,8 +393,8 @@ public class MvUtils {
         Preconditions.checkState(mvStmt instanceof QueryStatement);
         Analyzer.analyze(mvStmt, connectContext);
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
-        TransformerContext transformerContext =
-                new TransformerContext(columnRefFactory, connectContext, true);
+        TransformerContext transformerContext = new TransformerContext(
+                columnRefFactory, connectContext, connectContext.getSessionVariable().isEnableMaterializedViewRewrite());
         LogicalPlan logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(

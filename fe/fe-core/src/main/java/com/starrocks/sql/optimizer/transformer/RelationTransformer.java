@@ -662,8 +662,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
     public LogicalPlan visitView(ViewRelation node, ExpressionMapping context) {
         LogicalPlan logicalPlan = transform(node.getQueryStatement().getQueryRelation());
         List<ColumnRefOperator> newOutputColumns = keepView ? Lists.newArrayList() : null;
-        LogicalViewScanOperator viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns);
         if (keepView) {
+            LogicalViewScanOperator viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns);
             OptExprBuilder scanBuilder = new OptExprBuilder(viewScanOperator, Collections.emptyList(),
                     new ExpressionMapping(node.getScope(), newOutputColumns));
             return new LogicalPlan(scanBuilder, newOutputColumns, null);
@@ -673,7 +673,12 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     logicalPlan.getRootBuilder().getInputs(),
                     new ExpressionMapping(node.getScope(), logicalPlan.getOutputColumn()));
             if (enableViewBasedMvRewrite) {
-                builder.getRoot().getOp().setEquivalentOp(viewScanOperator);
+                try {
+                    LogicalViewScanOperator viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns);
+                    builder.getRoot().getOp().setEquivalentOp(viewScanOperator);
+                } catch (Exception e) {
+                    LOG.warn("build view scan failed for view:{}", node.getView().getName(), e);
+                }
             }
             return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
         }
