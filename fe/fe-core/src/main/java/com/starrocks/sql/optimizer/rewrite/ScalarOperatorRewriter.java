@@ -66,7 +66,6 @@ public class ScalarOperatorRewriter {
             new ReduceCastRule(),
             new MvNormalizePredicateRule(),
             new FoldConstantsRule(),
-            new SimplifiedScanColumnRule(),
             new SimplifiedPredicateRule(),
             new ExtractCommonPredicateRule(),
             new ArithmeticCommutativeRule()
