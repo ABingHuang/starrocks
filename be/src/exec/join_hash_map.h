@@ -338,6 +338,7 @@ public:
     }
 
     static Slice get_hash_key(const Columns& key_columns, size_t row_idx, uint8_t* buffer) {
+        // 把row_idx对应的行的key进行hash计算，得等hash key，用于进行分桶计算
         size_t byte_size = 0;
         for (const auto& key_column : key_columns) {
             byte_size += key_column->serialize(row_idx, buffer + byte_size);

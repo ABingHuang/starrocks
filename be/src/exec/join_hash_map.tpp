@@ -1352,8 +1352,12 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_outer_join(
 
         while (build_index != 0) {
             if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
+                // 第match_count行在左表和右表中对应的行号
+                // i表示左表的行号
                 _probe_state->probe_index[match_count] = i;
+                // build_index表示右表的行号
                 _probe_state->build_index[match_count] = build_index;
+                // 右表中每一行是否在左表中有match的行
                 _probe_state->build_match_index[build_index] = 1;
                 match_count++;
 
