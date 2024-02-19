@@ -568,6 +568,7 @@ StatusOr<ChunkPtr> JoinHashTable::convert_to_spill_schema(const ChunkPtr& chunk)
 
 void JoinHashTable::remove_duplicate_index(Filter* filter) {
     if (_hash_map_type == JoinHashMapType::empty) {
+        // 这里意思是对下面这些join类型，右表为空，则保留所有的行
         switch (_table_items->join_type) {
         case TJoinOp::LEFT_OUTER_JOIN:
         case TJoinOp::LEFT_ANTI_JOIN:
@@ -575,6 +576,7 @@ void JoinHashTable::remove_duplicate_index(Filter* filter) {
         case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN: {
             size_t row_count = filter->size();
             for (size_t i = 0; i < row_count; i++) {
+                // filter中值为1是保留下来的，0为过滤掉
                 (*filter)[i] = 1;
             }
             break;
@@ -741,11 +743,13 @@ void JoinHashTable::_remove_duplicate_index_for_left_outer_join(Filter* filter) 
 
     for (size_t i = 0; i < row_count; i++) {
         if (_probe_state->probe_match_index[_probe_state->probe_index[i]] == 0) {
+            // 等值join的时候不满足条件，这个时候会输出左表
             (*filter)[i] = 1;
             continue;
         }
 
         if (_probe_state->probe_match_index[_probe_state->probe_index[i]] == 1) {
+            // 等值join的时候有一行满足条件，但是other conjuncts不满足，则直接输出
             if ((*filter)[i] == 0) {
                 (*filter)[i] = 1;
             }
@@ -753,6 +757,7 @@ void JoinHashTable::_remove_duplicate_index_for_left_outer_join(Filter* filter) 
         }
 
         if ((*filter)[i] == 0) {
+            // other join的时候不满足条件，则将左表满足条件的行数减少
             _probe_state->probe_match_index[_probe_state->probe_index[i]]--;
         }
     }

@@ -486,6 +486,8 @@ Status HashJoiner::_process_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_
     switch (_join_type) {
     case TJoinOp::LEFT_OUTER_JOIN:
     case TJoinOp::FULL_OUTER_JOIN:
+        // 如果other conjuncts不满足，就会把build端的列置为null
+        // full outer join中右表还得在probe remain中进行处理
         return _process_outer_join_with_other_conjunct(chunk, _probe_column_count, _build_column_count, hash_table);
     case TJoinOp::RIGHT_OUTER_JOIN:
     case TJoinOp::LEFT_SEMI_JOIN:

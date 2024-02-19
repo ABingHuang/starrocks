@@ -1680,6 +1680,8 @@ JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_semi_join_with_ot
     PROBE_OVER()
 }
 
+// 核心逻辑是保留符合join条件的行
+// 这里处理的是等值条件
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_join_with_other_conjunct(
@@ -1707,15 +1709,20 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
         _probe_state->cur_row_match_count = 0;
         size_t build_index = _probe_state->next[i];
         if (build_index == 0) {
+            // 这里处理左表中和右表中是join key的行
             bool change_flag = false;
             if (_probe_state->null_array != nullptr && (*_probe_state->null_array)[i] == 1) {
                 // when left table col value is null needs match all rows in right table
                 for (size_t j = 1; j < _table_items->row_count + 1; j++) {
+                    // 本来left anti join按理说这里保留一行就可以
+                    // 但是后续还需要过滤other conjuncts，所以这里需要把所有可能的结果都暂时保留下来，
+                    // 用于后续再过滤
                     change_flag = true;
                     MATCH_RIGHT_TABLE_ROWS()
                     RETURN_IF_CHUNK_FULL()
                 }
             } else if (_table_items->key_columns[0]->is_nullable()) {
+                // 这里看样子应该是单列的join条件
                 // when left table col value not hits in hash table needs match all null value rows in right table
                 auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(_table_items->key_columns[0]);
                 auto& null_array = nullable_column->null_column()->get_data();
@@ -1736,6 +1743,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
             }
             continue;
         } else {
+            // 这里保留右表中join列是null的行，因为这些行也满足left anti join的逻辑
             // left table col value hits in hash table, we also need match null values firstly then match hit rows.
             if (_table_items->key_columns[0]->is_nullable()) {
                 auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(_table_items->key_columns[0]);
@@ -1749,6 +1757,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
             }
         }
 
+        // 这里保留下来的是*满足*等值join条件的行
         while (build_index != 0) {
             if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
                 _probe_state->probe_index[match_count] = i;
