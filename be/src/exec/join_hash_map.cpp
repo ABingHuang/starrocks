@@ -742,6 +742,7 @@ void JoinHashTable::_remove_duplicate_index_for_left_outer_join(Filter* filter) 
     size_t row_count = filter->size();
 
     for (size_t i = 0; i < row_count; i++) {
+        // probe_match_index记录的中左表的记录跟右表匹配的次数
         if (_probe_state->probe_match_index[_probe_state->probe_index[i]] == 0) {
             // 等值join的时候不满足条件，这个时候会输出左表
             (*filter)[i] = 1;
@@ -750,6 +751,7 @@ void JoinHashTable::_remove_duplicate_index_for_left_outer_join(Filter* filter) 
 
         if (_probe_state->probe_match_index[_probe_state->probe_index[i]] == 1) {
             // 等值join的时候有一行满足条件，但是other conjuncts不满足，则直接输出
+            // 因为最终是根据filter来确定输出哪一行
             if ((*filter)[i] == 0) {
                 (*filter)[i] = 1;
             }
@@ -763,13 +765,19 @@ void JoinHashTable::_remove_duplicate_index_for_left_outer_join(Filter* filter) 
     }
 }
 
+// probe_match_index表示左表的那一行跟右表匹配的次数
+// probe_index/build_index/probe_match_index设计的还是比较精巧
 void JoinHashTable::_remove_duplicate_index_for_left_semi_join(Filter* filter) {
     size_t row_count = filter->size();
     for (size_t i = 0; i < row_count; i++) {
         if ((*filter)[i] == 1) {
             if (_probe_state->probe_match_index[_probe_state->probe_index[i]] == 0) {
+                // 表示在等值条件的时候没有找到匹配的右表行，但是在other conjuncts的时候匹配了
+                // 这个时候需要输出该行，注意这个地方就是第一次匹配的左表的行
+                // 之后匹配的行由于这里已经将probe_match_index置为1了，所以会走else分支，也就是会被去重过滤掉
                 _probe_state->probe_match_index[_probe_state->probe_index[i]] = 1;
             } else {
+                // 这个表示在在等值的时候没有匹配的行或者匹配的非第一行（非第一次出现）
                 (*filter)[i] = 0;
             }
         }
@@ -780,11 +788,14 @@ void JoinHashTable::_remove_duplicate_index_for_left_anti_join(Filter* filter) {
     size_t row_count = filter->size();
     for (size_t i = 0; i < row_count; i++) {
         if (_probe_state->probe_match_index[_probe_state->probe_index[i]] == 0) {
+            // 等值条件没有match，则anti成立，输出
             (*filter)[i] = 1;
         } else if (_probe_state->probe_match_index[_probe_state->probe_index[i]] == 1) {
+            // 等值join成立，则对filter取反，也就是other conjunct通过，则过滤掉，不通过则保留（anti的逻辑）
             _probe_state->probe_match_index[_probe_state->probe_index[i]]--;
             (*filter)[i] = !(*filter)[i];
         } else if ((*filter)[i] == 0) {
+            // other conjuncts不通过，则将match index减一
             _probe_state->probe_match_index[_probe_state->probe_index[i]]--;
         } else {
             (*filter)[i] = 0;
