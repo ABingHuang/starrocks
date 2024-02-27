@@ -687,8 +687,11 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht(RuntimeState* state, Chun
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_remain(RuntimeState* state) {
     if (!_probe_state->has_remain) {
+        // build_match_index为0，表示右表中没有被匹配的行，就是probe_remain时候需要输出的行
+        // 适用于right outer join或者full outer join和right anti join，参考_need_post_probe
         size_t zero_count = SIMD::count_zero(_probe_state->build_match_index);
         if (zero_count <= 0) {
+            // 表示没有右表中没有匹配的行，则remain结束
             _probe_state->count = 0;
             _probe_state->has_remain = false;
             return;
@@ -697,6 +700,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_remain(RuntimeState* stat
     }
 
     size_t match_count = 0;
+    // cur_probe_index这个时候不表示probe的位置，而是表示build端的位置了，我理解是复用了这个变量
     size_t i = _probe_state->cur_probe_index;
     for (; i < _probe_state->build_match_index.size(); i++) {
         if (_probe_state->build_match_index[i] == 0) {
