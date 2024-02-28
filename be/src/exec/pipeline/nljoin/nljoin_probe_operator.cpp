@@ -422,6 +422,7 @@ ChunkPtr NLJoinProbeOperator::_permute_chunk_for_inner_join(size_t chunk_size) {
             break;
         }
 
+        // 这里决定哪个表是内表，哪个是外表（大表是内表）
         if (left_chunk_size > right_chunk_size) {
             _permute_chunk_base_left(&result_chunk);
             _next_build_row_index_for_inner_join();
@@ -435,12 +436,15 @@ ChunkPtr NLJoinProbeOperator::_permute_chunk_for_inner_join(size_t chunk_size) {
 }
 
 void NLJoinProbeOperator::_permute_chunk_base_left(ChunkPtr* chunk) {
+    // 左表比较大的情况，往result chunk里面先批量填充大表（也就是左表的数据）
     for (size_t i = 0; i < _probe_column_count; i++) {
         SlotId slot_id = _col_types[i]->id();
         ColumnPtr& dest_col = (*chunk)->get_column_by_slot_id(slot_id);
         const ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot_id);
         dest_col->append(*src_col);
     }
+    // 然后再一行一行拷贝右表的数据
+    // 对于inner join来说，左右表顺序无所谓，但是一般小表放在外循环中
     for (size_t i = _probe_column_count; i < _col_types.size(); i++) {
         SlotId slot_id = _col_types[i]->id();
         ColumnPtr& dest_col = (*chunk)->get_column_by_slot_id(slot_id);
