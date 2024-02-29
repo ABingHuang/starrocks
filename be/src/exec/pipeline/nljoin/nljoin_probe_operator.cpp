@@ -357,6 +357,11 @@ Status NLJoinProbeOperator::_probe_for_other_join(const ChunkPtr& chunk) {
                 (*filter)[0] = 0;
             }
         }
+        // 这个逻辑看着依赖chunk是同一个probe row才能成立？这个在哪里保证了吗？
+        // 如果build size比较小，这个时候chunk中不是包含了多个probe row吗？
+        // 只有当_num_build_chunks() == 1的时候，才会出现一个chunk中有多probe row？
+        // 哦，对，是这样的，在iterate_enumerate_chunk处理了这种情况，当_num_build_chunks() == 1是按照build rows为step的
+        // 否则按照chunk size为step
         iterate_enumerate_chunk(chunk, [&](bool complete_probe_row, size_t start, size_t end) {
             size_t first_matched = SIMD::find_nonzero(*filter, start, end - start);
             std::fill(filter->begin() + start, filter->begin() + end, 0);
@@ -375,6 +380,7 @@ Status NLJoinProbeOperator::_probe_for_other_join(const ChunkPtr& chunk) {
                     }
                 } else {
                     // Once matched, this row would be thrown
+                    // 当前的probe row不符合join条件，直接跳过
                     _probe_row_finished = true;
                 }
             }
@@ -385,6 +391,9 @@ Status NLJoinProbeOperator::_probe_for_other_join(const ChunkPtr& chunk) {
     if (_is_right_join()) {
         // If the filter and join_conjuncts are empty, it means join conjunct is always true
         // So we need to mark the build_match_flag for all rows
+        // _self_build_match_flag是为build端构造的一个match filter，只要右表跟左表有一行匹配，就设置为1
+        // 下面的逻辑就是根据filter结果来设置_self_build_match_flag，用or
+        // 一个前提是_num_build_chunks() == 1来判断是不是mult probe rows，以决定filter的step
         if (_join_conjuncts.empty()) {
             DCHECK(!filter);
             _self_build_match_flag.assign(_self_build_match_flag.size(), 1);
@@ -472,6 +481,7 @@ void NLJoinProbeOperator::_permute_chunk_base_right(ChunkPtr* chunk) {
 // The chunk either consists two conditions:
 // 1. Multiple probe rows and multiple build single-chunk
 // 2. One probe rows and one build chunk
+// 这个核心罗就是以probe端为驱动表，为每一行probe row填充build row
 ChunkPtr NLJoinProbeOperator::_permute_chunk_for_other_join(size_t chunk_size) {
     // TODO: optimize the loop order for small build chunk
     ChunkPtr chunk = _init_output_chunk(chunk_size);
@@ -489,8 +499,10 @@ ChunkPtr NLJoinProbeOperator::_permute_chunk_for_other_join(size_t chunk_size) {
         if (!_probe_row_finished && is_last_build_chunk) {
             _permute_probe_row(chunk);
             _reset_build_chunk_index();
+            // 当是最后一个build chunk的时候，认为该probe行probe finished
             _probe_row_finished = true;
             probe_row_start();
+            // 这是该probe row的最后一个chunk，直接返回（没有accumulate的逻辑）
             return chunk;
         }
 

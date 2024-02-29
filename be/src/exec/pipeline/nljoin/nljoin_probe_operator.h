@@ -127,7 +127,9 @@ private:
 
     // Probe states
     ChunkPtr _probe_chunk = nullptr;
+    // 表示的当前的probe row是否找到match，就是是否满足join条件
     bool _probe_row_matched = false;  // For multi build-chunk, whether this probe row matched any join conjuncts
+    // 表示当前的probe row是否probe结束
     bool _probe_row_finished = false; // For multi build-chunk, whether this probe row is the last
     size_t _probe_row_start = 0;      // Start index of current chunk
     size_t _probe_row_current = 0;    // End index of current chunk
