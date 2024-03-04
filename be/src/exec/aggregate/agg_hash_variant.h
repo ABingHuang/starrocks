@@ -463,6 +463,8 @@ struct AggHashMapVariant {
         phase2_slice_fx16,
     };
 
+    // aggregate聚合的核心数据结构，是一个std::variant，AggHashSetVariant也是类似
+    // 核心的逻辑就是根据聚合key的不同，选择最优的HashMap，以优化计算（向量化计算）
     detail::AggHashMapWithKeyPtr hash_map_with_key;
     auto& get_variant() { return hash_map_with_key; }
 

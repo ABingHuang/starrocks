@@ -1107,6 +1107,7 @@ void Aggregator::_reset_exprs() {
         _group_by_column = nullptr;
     }
 
+    // 一个agg函数，可能会有多个输入参数，比如covar_pop，group_concat，max_by
     for (size_t i = 0; i < _agg_input_columns.size(); i++) {
         for (size_t j = 0; j < _agg_input_columns[i].size(); j++) {
             _agg_input_columns[i][j] = nullptr;
@@ -1116,6 +1117,7 @@ void Aggregator::_reset_exprs() {
 }
 
 Status Aggregator::_evaluate_group_by_exprs(Chunk* chunk) {
+    // _group_by_columns的个数是key个，并且行数是跟chunk一样大的（初始化为chunk size）
     SCOPED_TIMER(_agg_stat->expr_compute_timer);
     // Compute group by columns
     for (size_t i = 0; i < _group_by_expr_ctxs.size(); i++) {
