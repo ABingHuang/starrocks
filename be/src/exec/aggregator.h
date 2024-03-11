@@ -61,13 +61,16 @@ struct RawHashTableIterator {
     int y;
 };
 
+// 内存空间分配器
 struct HashTableKeyAllocator {
     // number of states allocated consecutively in a single alloc
     static auto constexpr alloc_batch_size = 1024;
     // memory aligned when allocate
     static size_t constexpr aligned = 16;
 
+    // 这个不是aggregate key的大小。本质是所有的AggregateFunction需要的AggData的空间大小总和
     int aggregate_key_size = 0;
+    // vecs存储的是地址+使用的偏移
     std::vector<std::pair<void*, int>> vecs;
     MemPool* pool = nullptr;
 
@@ -76,6 +79,7 @@ struct HashTableKeyAllocator {
     RawHashTableIterator end() { return {this, vecs.size(), 0}; }
 
     AggDataPtr allocate() {
+        // 当second为alloc_batch_size，说明这一批的内存空间用完了，需要重新申请新的内存空间
         if (vecs.empty() || vecs.back().second == alloc_batch_size) {
             uint8_t* mem = pool->allocate_aligned(alloc_batch_size * aggregate_key_size, aligned);
             if (mem == nullptr) {
@@ -83,9 +87,11 @@ struct HashTableKeyAllocator {
             }
             vecs.emplace_back(mem, 0);
         }
+        // 一次分配aggregate key size的大小
         return static_cast<AggDataPtr>(vecs.back().first) + aggregate_key_size * vecs.back().second++;
     }
 
+    // null的key只有一个，所以这里不需要批量分配
     AggDataPtr allocate_null_key_data() { return pool->allocate_aligned(aggregate_key_size, aligned); }
 
     void reset() { vecs.clear(); }
@@ -564,12 +570,15 @@ protected:
 
 template <class HashMapWithKey>
 inline AggDataPtr AllocateState<HashMapWithKey>::operator()(const typename HashMapWithKey::KeyType& key) {
+    // 这个state allocator比较关键，用于管理空间分配
     AggDataPtr agg_state = aggregator->_state_allocator.allocate();
+    // AggData的开始处存放的是key
     *reinterpret_cast<typename HashMapWithKey::KeyType*>(agg_state) = key;
     size_t created = 0;
     size_t aggregate_function_sz = aggregator->_agg_fn_ctxs.size();
     try {
         for (int i = 0; i < aggregate_function_sz; i++) {
+            // 调用各个AggregateFunction进行aggData的空间分配
             aggregator->_agg_functions[i]->create(aggregator->_agg_fn_ctxs[i],
                                                   agg_state + aggregator->_agg_states_offsets[i]);
             created++;

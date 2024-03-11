@@ -86,6 +86,11 @@ using SliceAggTwoLevelHashMap =
 // This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
 static constexpr size_t AGG_HASH_MAP_DEFAULT_PREFETCH_DIST = 16;
 
+// 这里复用了agg_state的内存空间，作为hash_values的存储空间
+// agg_state本来是存储agg state地址的向量，由于长度跟size_t一致，并且在分配AggState之前用一下就可以
+// 所以这里可以复用
+// __prefetch_index是从AGG_HASH_MAP_DEFAULT_PREFETCH_DIST开始预取的，也就是从16字节的地方开始预取的
+// 下面先预计算列的hash值
 static_assert(sizeof(AggDataPtr) == sizeof(size_t));
 #define AGG_HASH_MAP_PRECOMPUTE_HASH_VALUES(column, prefetch_dist)              \
     size_t const column_size = column->size();                                  \
@@ -178,6 +183,7 @@ struct AggHashMapWithOneNumberKeyWithNullable
         DCHECK(!key_columns[0]->is_nullable());
         auto column = down_cast<ColumnType*>(key_columns[0].get());
 
+        // hash map的bucket count是由什么决定的？
         size_t bucket_count = this->hash_map.bucket_count();
 
         // Assign not_founds vector when needs compute not founds.
@@ -274,6 +280,11 @@ struct AggHashMapWithOneNumberKeyWithNullable
             FieldType key = column->get_data()[i];
 
             if constexpr (allocate_and_compute_state) {
+                // lazy_emplace的意思是如果key在hash_map中不存在，则调用后面的lambda函数进行value的分配
+                // 如果存在，则直接返回value
+                // 好处是如果存在的时候，不用每次都进行内存空间分配，并且实现了同样的key，对应同一个聚合AggData
+                // 怎么理解这个ctor呢？可以参考fixed_hash_map.h中SmallFixedSizeHashMap.lazy_emplace的实现
+                // ctor是一个接收两个参数的函数，一个是key，一个是value参数
                 auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
                     if constexpr (compute_not_founds) {
                         DCHECK(not_founds);
@@ -302,6 +313,7 @@ struct AggHashMapWithOneNumberKeyWithNullable
         for (size_t i = 0; i < chunk_size; i++) {
             if (null_data[i]) {
                 if (UNLIKELY(null_key_data == nullptr)) {
+                    // 分配一次，多次复用
                     null_key_data = allocate_func(nullptr);
                 }
                 (*agg_states)[i] = null_key_data;
@@ -425,9 +437,12 @@ struct AggHashMapWithOneStringKeyWithNullable
 
         if (key_columns[0]->only_null()) {
             if (null_key_data == nullptr) {
+                // null的key只有一个，所以这里分配一次，然后多次赋值
+                // 分配函数参考：HashTableKeyAllocator::allocate_null_key_data
                 null_key_data = allocate_func(nullptr);
             }
             for (size_t i = 0; i < chunk_size; i++) {
+                // 多次赋值
                 (*agg_states)[i] = null_key_data;
             }
         } else {
@@ -518,6 +533,8 @@ struct AggHashMapWithOneStringKeyWithNullable
                                                        Func&& allocate_func, std::vector<uint8_t>* not_founds) {
         auto* data_column = down_cast<BinaryColumn*>(nullable_column->data_column().get());
         const auto& null_data = nullable_column->null_column_data();
+        // 针对nullable的列，还得一行一行计算
+        // 不管是否为nullable，都得一行一行计算
         for (size_t i = 0; i < chunk_size; i++) {
             if (null_data[i]) {
                 if (UNLIKELY(null_key_data == nullptr)) {
@@ -570,6 +587,7 @@ struct AggHashMapWithOneStringKeyWithNullable
             auto* column = down_cast<BinaryColumn*>(nullable_column->mutable_data_column());
             keys.resize(chunk_size);
             column->append_strings(keys);
+            // ？ why？
             nullable_column->null_column_data().resize(chunk_size);
         } else {
             DCHECK(!null_key_data);
@@ -590,6 +608,7 @@ using AggHashMapWithOneStringKey = AggHashMapWithOneStringKeyWithNullable<HashMa
 template <typename HashMap>
 using AggHashMapWithOneNullableStringKey = AggHashMapWithOneStringKeyWithNullable<HashMap, true>;
 
+// 针对多个key列的场景，采用序列化的方式实现hash map
 template <typename HashMap>
 struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMapWithSerializedKey<HashMap>> {
     using Base = AggHashMapWithKey<HashMap, AggHashMapWithSerializedKey<HashMap>>;
@@ -643,6 +662,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     ALWAYS_NOINLINE void compute_agg_states_by_rows(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                                     Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
                                                     std::vector<uint8_t>* not_founds, size_t max_serialize_each_row) {
+        // 按行计算，需要的空间比较少一些，需要buffer大小就可以
         for (size_t i = 0; i < chunk_size; ++i) {
             auto serialize_cursor = buffer;
             for (const auto& key_column : key_columns) {
@@ -761,6 +781,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     int32_t _chunk_size;
 };
 
+// 多列定长的场景
 template <typename HashMap>
 struct AggHashMapWithSerializedKeyFixedSize
         : public AggHashMapWithKey<HashMap, AggHashMapWithSerializedKeyFixedSize<HashMap>> {

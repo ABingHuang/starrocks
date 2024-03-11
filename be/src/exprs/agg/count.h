@@ -25,6 +25,8 @@ struct AggregateCountWindowFunctionState {
     bool is_frame_init = false;
 };
 
+// count函数的聚合状态
+// 本质就是每个聚合函数会定义自己的聚合状态 
 template <bool IsWindowFunc>
 struct AggregateCountFunctionState
         : public std::conditional_t<IsWindowFunc, AggregateCountWindowFunctionState, AggregateFunctionEmptyState> {

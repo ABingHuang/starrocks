@@ -367,6 +367,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
         _is_merge_funcs[i] = aggregate_functions[i].nodes[0].agg_expr.is_merge_agg;
         // get function
         if (fn.name.function_name == "count") {
+            // 如果是count() count(*)这种，他的arg_types为空
             bool is_input_nullable =
                     !fn.arg_types.empty() && (has_outer_join_child || desc.nodes[0].has_nullable_child);
             auto* func = get_aggregate_function("count", TYPE_BIGINT, TYPE_BIGINT, is_input_nullable);
@@ -420,6 +421,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
         }
 
         int node_idx = 0;
+        // _agg_expr_ctxs[i]存储的是第i个聚合函数使用到的子表达式
         for (int j = 0; j < desc.nodes[0].num_children; ++j) {
             ++node_idx;
             Expr* expr = nullptr;
