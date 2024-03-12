@@ -21,6 +21,8 @@
 
 namespace starrocks {
 
+// ConstColumn一般情况下只存储一行数据+行数
+// 在aggregate中会调用unpack_and_duplicate_const_column进行拷贝
 class ConstColumn final : public ColumnFactory<Column, ConstColumn> {
     friend class ColumnFactory<Column, ConstColumn>;
 

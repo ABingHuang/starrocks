@@ -62,6 +62,7 @@ Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
             _aggregator->set_ht_eos();
         }
         _aggregator->hash_map_variant().visit(
+                // 获取agg state地址信息
                 [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });
 
     } else if (_aggregator->is_none_group_by_exprs()) {
@@ -93,11 +94,14 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const Chun
 
     SCOPED_TIMER(_aggregator->agg_compute_timer());
     // try to build hash table if has group by keys
+    // 构建hash表，分配聚合状态的内存空间（还没有进行聚合计算）
     if (!_aggregator->is_none_group_by_exprs()) {
         TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size, _agg_group_by_with_limit));
         TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
     }
 
+    // 进行聚合计算
+    // 这里区分是否包含group by key，区分是否带limit
     // batch compute aggregate states
     if (_aggregator->is_none_group_by_exprs()) {
         RETURN_IF_ERROR(_aggregator->compute_single_agg_state(chunk.get(), chunk_size));

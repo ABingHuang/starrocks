@@ -124,6 +124,8 @@ struct AggHashMapWithKey {
                 chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, nullptr);
     }
 
+    // 用户aggregate with limit的场景，当前的hash表的size超过limit之后，就不新增，
+    // 没有在hash表里面的行，会通过not_founds标记，减少计算量
     template <typename Func>
     void build_hash_map_with_selection(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                        Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
@@ -358,6 +360,7 @@ struct AggHashMapWithOneNumberKeyWithNullable
             auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
             auto* column = down_cast<ColumnType*>(nullable_column->mutable_data_column());
             column->get_data().insert(column->get_data().end(), keys.begin(), keys.begin() + chunk_size);
+            // 这里一定是非null的情况，所以直接就resize，将null column初始化为0，也就是false
             nullable_column->null_column_data().resize(chunk_size);
         } else {
             DCHECK(!null_key_data);
@@ -587,7 +590,7 @@ struct AggHashMapWithOneStringKeyWithNullable
             auto* column = down_cast<BinaryColumn*>(nullable_column->mutable_data_column());
             keys.resize(chunk_size);
             column->append_strings(keys);
-            // ？ why？
+            // 因为这个存储的一定的非null的key，所以直接resize，初始化为0
             nullable_column->null_column_data().resize(chunk_size);
         } else {
             DCHECK(!null_key_data);

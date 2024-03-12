@@ -37,6 +37,7 @@ void AggregateBlockingSourceOperator::close(RuntimeState* state) {
     SourceOperator::close(state);
 }
 
+// agg source算子做的事情就是把hashmap转chunk
 StatusOr<ChunkPtr> AggregateBlockingSourceOperator::pull_chunk(RuntimeState* state) {
     RETURN_IF_CANCELLED(state);
 

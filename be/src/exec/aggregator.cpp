@@ -761,6 +761,7 @@ Status Aggregator::compute_single_agg_state(Chunk* chunk, size_t chunk_size) {
     return Status::OK();
 }
 
+// 进行聚合状态计算
 Status Aggregator::compute_batch_agg_states(Chunk* chunk, size_t chunk_size) {
     SCOPED_TIMER(_agg_stat->agg_function_compute_timer);
     bool use_intermediate = _use_intermediate_as_input();
@@ -1026,6 +1027,8 @@ Status Aggregator::check_has_error() {
     return Status::OK();
 }
 
+// 需要根据agg的阶段（update还是merge），来决定使用什么类型的列
+// 这个在agg实现中要记住的
 // When need finalize, create column by result type
 // otherwise, create column by serde type
 Columns Aggregator::_create_agg_result_columns(size_t num_rows, bool use_intermediate) {
@@ -1357,6 +1360,7 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
         Columns group_by_columns = _create_group_by_columns(num_rows);
         Columns agg_result_columns = _create_agg_result_columns(num_rows, use_intermediate);
 
+        // 结果就跟原始的数据无关了，全部从agg states中获取
         int32_t read_index = 0;
         {
             SCOPED_TIMER(_agg_stat->iter_timer);
@@ -1364,7 +1368,9 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
             // get key/value from hashtable
             while ((it != end) & (read_index < chunk_size)) {
                 auto* value = it.value();
+                // value就是state空间，开始的地方放的是这个group key的内容，所以这里results就是key的序列化之后的内容
                 hash_map_with_key.results[read_index] = *reinterpret_cast<typename HashMapWithKey::KeyType*>(value);
+                // _tmp_agg_states放的是agg state的内容
                 _tmp_agg_states[read_index] = value;
                 ++read_index;
                 it.next();
@@ -1373,6 +1379,7 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
 
         if (read_index > 0) {
             {
+                // 构造keys
                 SCOPED_TIMER(_agg_stat->group_by_append_timer);
                 hash_map_with_key.insert_keys_to_columns(hash_map_with_key.results, group_by_columns, read_index);
             }
@@ -1380,12 +1387,14 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
             {
                 SCOPED_TIMER(_agg_stat->agg_append_timer);
                 if (!use_intermediate) {
+                    // merge agg
                     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
                         TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_finalize(_agg_fn_ctxs[i], read_index,
                                                                               _tmp_agg_states, _agg_states_offsets[i],
                                                                               agg_result_columns[i].get()));
                     }
                 } else {
+                    // update agg
                     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
                         TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_serialize(_agg_fn_ctxs[i], read_index,
                                                                                _tmp_agg_states, _agg_states_offsets[i],
