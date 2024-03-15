@@ -336,6 +336,7 @@ private:
 private:
     const size_t _num_slots;
     const size_t _slot_mask;
+    // 有多个分桶来降低锁冲突
     std::vector<std::shared_mutex> _mutexes;
     std::vector<std::unordered_map<TUniqueId, QueryContextPtr>> _context_maps;
     std::vector<std::unordered_map<TUniqueId, QueryContextPtr>> _second_chance_maps;
