@@ -150,6 +150,7 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                 DistributionSpec.createHashDistributionSpec(new HashDistributionDesc(enforceNullStrict(shuffleColumns),
                         HashDistributionDesc.SourceType.SHUFFLE_ENFORCE));
 
+        // childOutputProperty相当于是input的property set
         Pair<GroupExpression, PhysicalPropertySet> pair =
                 enforceChildDistribution(enforceDistributionSpec, child, childOutputProperty);
         PhysicalPropertySet newChildInputProperty = pair.second;
@@ -299,6 +300,7 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
     }
 
     public Void visitPhysicalJoin(PhysicalJoinOperator node, ExpressionContext context) {
+        // 这里没有递归调用子结点，所以并不会处理sub tree，只会处理groupExpression
         checkState(childrenOutputProperties.size() == 2);
 
         String hint = node.getJoinHint();
@@ -343,6 +345,7 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
             // 2.1 respect the hint
             if (JoinOperator.HINT_SHUFFLE.equals(hint) || JoinOperator.HINT_SKEW.equals(hint)) {
                 if (leftDistributionDesc.isLocal()) {
+                    // child如果是local的shuffle
                     enforceChildShuffleDistribution(leftShuffleColumns, leftChild, leftChildOutputProperty, 0);
                 }
                 if (rightDistributionDesc.isLocal()) {

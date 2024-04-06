@@ -111,6 +111,7 @@ public class HashDistributionSpec extends DistributionSpec {
         return true;
     }
 
+    // spec是required property
     public boolean isSatisfy(DistributionSpec spec) {
         if (spec.type.equals(DistributionType.ANY)) {
             return true;

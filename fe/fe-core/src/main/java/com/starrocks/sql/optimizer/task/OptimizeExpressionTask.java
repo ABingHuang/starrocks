@@ -57,10 +57,15 @@ public class OptimizeExpressionTask extends OptimizerTask {
         filterInValidRules(groupExpression, logicalRules, validRules);
 
         if (!isExplore) {
+            // 在explore的时候，只需要调用transformation rule生成logical expression就可以，所以不需要implement rules
             List<Rule> physicalRules = context.getOptimizerContext().getRuleSet().getImplementRules();
             filterInValidRules(groupExpression, physicalRules, validRules);
         }
 
+        // 根据promise进行rule的排序，transformation为1，implement rule为2
+        // 所以会先做transformation，然后再进行implement
+        // 因为得现有逻辑计划，才能生成物理计划
+        // 这样子调用一次的task就可以把逻辑计划和物理计划都生成了
         validRules.sort(Comparator.comparingInt(Rule::promise));
         return validRules;
     }
@@ -75,6 +80,12 @@ public class OptimizeExpressionTask extends OptimizerTask {
     public void execute() {
         List<Rule> rules = getValidRules();
 
+        // 这里有一个核心点就是
+        // 这里是先递归的ExploreGroupTask之后，再进行ApplyRuleTask
+        // 也就是意味着在优化当前的group expresssion之前，
+        // 所有的subtree的所有可能的逻辑子计划都已经生成好了
+        // 这样子在当前的group expresssion的binding过程中，就是在探索所有可能的情况了
+        // 这个本质就是执行是自底向上的执行！！！
         for (Rule rule : rules) {
             pushTask(new ApplyRuleTask(context, groupExpression, rule, isExplore));
         }

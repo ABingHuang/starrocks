@@ -32,13 +32,22 @@ public class ExploreGroupTask extends OptimizerTask {
     @Override
     public void execute() {
         if (group.isExplored()) {
+            // 这里一个group只会explore一次
+            // 因为explore一次之后，group就会调用所有的rule生成所有可能的logical expression了，
+            // 没有必要多次调用，
+            // ***这里有一个核心的前提条件***，比较隐晦，就是整个优化的执行是自底向上的执行，
+            // 一定是下一层的plan都已经优化好了之后，再执行上层的OptimizeExpression的操作
+            // 后面就是根据搜索的context（parent required property set之类的进行物理计划的生成和enforce工作）
             return;
         }
 
         for (GroupExpression logical : group.getLogicalExpressions()) {
+            // 只会explore expression
+            // 注意：isExplore设置为true
             pushTask(new OptimizeExpressionTask(context, logical, true));
         }
 
+        // memorization，只生成一次
         group.setExplored();
     }
 

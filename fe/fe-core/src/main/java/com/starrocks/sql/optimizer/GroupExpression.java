@@ -160,6 +160,8 @@ public class GroupExpression {
 
     public void setOutputPropertySatisfyRequiredProperty(PhysicalPropertySet outputPropertySet,
                                                          PhysicalPropertySet requiredPropertySet) {
+        // 一定是从这里拿满足条件的property
+        // 这里因为会加入any的property
         this.outputPropertyMap.put(requiredPropertySet, outputPropertySet);
     }
 

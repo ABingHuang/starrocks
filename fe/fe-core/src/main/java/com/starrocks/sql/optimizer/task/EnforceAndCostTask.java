@@ -113,6 +113,12 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
     // 4. Add enforcer for node if it can not satisfy the requirements.
     @Override
     public void execute() {
+        // 核心点
+        // 这是cascades优化器应用pruning策略的地方
+        //
+        // 1. lower bound pruning，top local cost + input cost1 + input_group2's lower bound cost > Cost Limit. lower boudn cost是根据逻辑统计信息计算出来的
+        // 2. global epsilon pruning : 当完整优化出一个plan后，如果其cost小于一个预设的上界GLOBAL_EPS，则认为该plan足够优，结束优化流程。很明显这牺牲了plan最优性来提升优化效率，而且对于GLOBAL_EPS的设定会非常困难
+        // 3. upper bound pruning
         if (groupExpression.isUnused()) {
             return;
         }
@@ -136,17 +142,22 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         // Init costs and get required properties for children
         initRequiredProperties();
 
+        // 这里为什么会有多个childrenRequiredPropertiesList呢？
         for (; curPropertyPairIndex < childrenRequiredPropertiesList.size(); curPropertyPairIndex++) {
+            // 这里list是因为每个位置对应一个child
             List<PhysicalPropertySet> childrenRequiredProperties =
                     childrenRequiredPropertiesList.get(curPropertyPairIndex);
 
             // Calculate local cost and update total cost
             if (curChildIndex == 0 && prevChildIndex == -1) {
+                // 计算的是当前groupExpression的大小，不包括sub tree
                 localCost = CostModel.calculateCost(groupExpression);
                 curTotalCost += localCost;
             }
 
             for (; curChildIndex < groupExpression.getInputs().size(); curChildIndex++) {
+                // 这里会递归的向下去按照context去获取需要的子树查询计划，
+                // 就是要拿到满足context（physical property）最优的子plan
                 PhysicalPropertySet childRequiredProperty = childrenRequiredProperties.get(curChildIndex);
                 Group childGroup = groupExpression.getInputs().get(curChildIndex);
 
@@ -162,6 +173,13 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 if (childBestExpr == null) {
                     // We haven't optimized child group
                     prevChildIndex = curChildIndex;
+                    // 核心点
+                    // 这里是整个EnforceAndCostTask的核心
+                    // 这个是核心关键，到这里说明儿子group中没有符合property set的查询计划
+                    // 这里就会拿childRequiredProperty作为required property，让孩子结点去产生
+                    // 满足这个property的计划（通过enforcer来满足这样的计划）
+                    // 所以，再回头执行父group的EnforceAndCostTask的时候，那个时候一定有满足条件的子group的
+                    // 执行计划
                     optimizeChildGroup(childRequiredProperty, childGroup);
                     return;
                 }
@@ -193,11 +211,13 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 // before we compute the property, here need to make sure that the plan is legal
                 ChildOutputPropertyGuarantor childOutputPropertyGuarantor = new ChildOutputPropertyGuarantor(context,
                         groupExpression,
-                        context.getRequiredProperty(),
-                        childrenBestExprList,
-                        childrenRequiredProperties,
-                        childrenOutputProperties,
+                        context.getRequiredProperty(), // 父亲结点对当前结点的要求
+                        childrenBestExprList, // 孩子结点对应的符合当前结点需要的context的最好的child expr
+                        childrenRequiredProperties, // 当前结点对孩子结点要求的properties
+                        childrenOutputProperties, // child对外提供的properties。有可能required是any，提供的是local，所以单独列出来
                         curTotalCost);
+                // 在这里，会判断是否满足hint或者required的需求
+                // 如果不满足，就会enforce
                 curTotalCost = childOutputPropertyGuarantor.enforceLegalChildOutputProperty();
 
                 if (curTotalCost > context.getUpperBoundCost()) {
@@ -213,7 +233,10 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 // compute the output property
                 OutputPropertyDeriver outputPropertyDeriver = new OutputPropertyDeriver(groupExpression,
                         context.getRequiredProperty(), childrenOutputProperties);
+                // 核心点
+                // 这里应该是计算当前结点对外的output property，这个property可能跟parent required property不一致，所以在下面的函数中需要enforce
                 PhysicalPropertySet outputProperty = outputPropertyDeriver.getOutputProperty();
+                // 核心点，以及进行对应的enforce
                 recordCostsAndEnforce(outputProperty, childrenRequiredProperties);
             }
             // Reset child idx and total cost
@@ -261,6 +284,9 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
     }
 
     private void optimizeChildGroup(PhysicalPropertySet inputProperty, Group childGroup) {
+        // 这个地方先把当前的父group的EnforceAndCostTask压栈（会保留当前的各种index，以便恢复之后从断点执行）
+        // 然后把儿子group的EnforceAndCostTask压栈，是为了保证一定是儿子group的EnforceAndCostTask先执行完
+        // 再执行父亲group的EnforceAndCostTask
         pushTask((EnforceAndCostTask) clone());
         double newUpperBound = context.getUpperBoundCost() - curTotalCost;
         TaskContext taskContext = new TaskContext(context.getOptimizerContext(), inputProperty,
@@ -322,6 +348,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         setPropertyWithCost(groupExpression, outputProperty, childrenOutputProperties);
         if (outputProperty.getCteProperty().isEmpty()) {
             // groupExpression can satisfy the ANY type output property
+            // 核心点：会加ANY属性到map中
             setPropertyWithCost(groupExpression, outputProperty, PhysicalPropertySet.EMPTY, childrenOutputProperties);
         }
     }
@@ -333,12 +360,14 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         localCost = CostModel.calculateCostWithChildrenOutProperty(groupExpression, childrenOutputProperties);
         curTotalCost += localCost;
 
+        // 先登记自己推断出来的outputProperty和对应的childrenOutputProperties（也就是对应的input properties）
         setSatisfiedPropertyWithCost(outputProperty, childrenOutputProperties);
         PhysicalPropertySet requiredProperty = context.getRequiredProperty();
         recordPlanEnumInfo(groupExpression, outputProperty, childrenOutputProperties);
         // Enforce property if outputProperty doesn't satisfy context requiredProperty
         if (!outputProperty.isSatisfy(requiredProperty)) {
             // Enforce the property to meet the required property
+            // 核心逻辑：这里是重点，会进行enforce
             PhysicalPropertySet enforcedProperty = enforceProperty(outputProperty, requiredProperty);
 
             // enforcedProperty is superset of requiredProperty
@@ -347,8 +376,13 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                         requiredProperty, Lists.newArrayList(outputProperty));
             }
         } else {
+            // 如果满足required的context条件
             // outputProperty is superset of requiredProperty
             if (!outputProperty.equals(requiredProperty)) {
+                // 如果property跟自己推断的不一致，就会增加记录，不仅记录
+                // outputProperty -> childrenOutputProperties
+                // 也会记录：
+                // requiredProperty -> requiredProperty
                 setPropertyWithCost(groupExpression, outputProperty, requiredProperty, childrenOutputProperties);
             }
         }
@@ -425,6 +459,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
             // Each group expression need to record the outputProperty satisfy what requiredProperty,
             // because group expression can generate multi outputProperty. eg. Join may have shuffle local
             // and shuffle join two types outputProperty.
+            // 只有cost有降低或者是新增的outputProperty，才会更新outputPropertyMap
             groupExpression.setOutputPropertySatisfyRequiredProperty(outputProperty, requiredProperty);
         }
         this.groupExpression.getGroup().setBestExpression(groupExpression, curTotalCost, requiredProperty);
@@ -516,6 +551,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
             enforcedProperty = enforceSort(outputProperty);
             enforcedProperty = enforceDistribute(enforcedProperty);
         } else {
+            // 先加distribute，然后再加sort
             enforcedProperty = enforceDistribute(outputProperty);
             enforcedProperty = enforceSort(enforcedProperty);
         }
