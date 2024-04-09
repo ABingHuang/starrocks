@@ -37,6 +37,7 @@ public class JoinReorderGreedy extends JoinOrder {
 
     public JoinReorderGreedy(OptimizerContext context) {
         super(context);
+        // 保留topk个贪心的结果，k等于10
         // Ensure that topk's ExpressionInfo is returned in the same order, the final plan will be different if the
         // cost is same and get ExpressionInfo in different order.
         this.topKExpr = MinMaxPriorityQueue.orderedBy((Comparator<ExpressionInfo>) (left, right) -> {
@@ -53,8 +54,11 @@ public class JoinReorderGreedy extends JoinOrder {
 
     @Override
     protected void enumerate() {
+        // 从第2层开始寻找
         for (int curJoinLevel = 2; curJoinLevel <= atomSize; curJoinLevel++) {
+            // 采用当前level + 第一层的结果构造下一个层级的结果，直到最高level
             searchJoinOrders(curJoinLevel - 1, 1, false);
+            // 这里考虑了bushy tree的结果
             searchBushyJoinOrders(curJoinLevel);
         }
     }
@@ -108,6 +112,7 @@ public class JoinReorderGreedy extends JoinOrder {
                 joinBitSet.or(rightBitset);
 
                 computeCost(joinExpr.get());
+                // 这里会将结果添加到curLevel中
                 getOrCreateGroupInfo(curLevel, joinBitSet, joinExpr.get());
                 double joinCost = joinExpr.get().cost;
                 if (joinCost < bestCost) {

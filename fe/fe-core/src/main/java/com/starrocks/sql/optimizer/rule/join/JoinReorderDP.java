@@ -73,6 +73,7 @@ public class JoinReorderDP extends JoinOrder {
             Ordering<ExpressionInfo> resultComparator = Ordering.from(Comparator.comparing(ExpressionInfo::getCost));
 
             List<ExpressionInfo> results = new ArrayList<>();
+            // 划分子问题
             List<BitSet> partitions = generatePartitions(joinKeys);
             for (BitSet partition : partitions) {
                 GroupInfo leftGroup = getBestExpr(partition);
