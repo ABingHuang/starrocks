@@ -63,6 +63,7 @@ public class ScalarApply2JoinRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalApplyOperator apply = (LogicalApplyOperator) input.getOp();
         // Or-Scope is same with And-Scope
+        // 这个时候把apply下的相关filter上提了，提到了Apply结点上了，所以这里check input.getChild(1)的时候，没有·相关·的谓词了
         return apply.isScalar() && !SubqueryUtils.containsCorrelationSubquery(input);
     }
 

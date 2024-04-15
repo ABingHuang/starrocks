@@ -41,11 +41,14 @@ public class LogicalApplyOperator extends LogicalOperator {
      */
     private ScalarOperator subqueryOperator;
 
+    // output就是上面subqueryOperator的key，就是output
     /**
      * output columnRef for subqueryOperator
      */
     private ColumnRefOperator output;
 
+    // 这个意思是在子查询的where谓词中存在相关的列（outer table的列）
+    // 什么时候会设置correlationColumnRefs呢
     /**
      * Correlation column which from outer table and used in the filter of sub-query(inner table)
      */
@@ -61,6 +64,7 @@ public class LogicalApplyOperator extends LogicalOperator {
      */
     private boolean needCheckMaxRows;
 
+    // 是否是子查询在where的时候才有可能为true？但是where中也不一定看着 xx in subquery is null就是false
     /**
      * Mark the subquery can be cast to Semi/Anti-Join
      */

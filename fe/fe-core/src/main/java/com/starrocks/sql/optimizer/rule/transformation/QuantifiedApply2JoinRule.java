@@ -40,6 +40,13 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+// 这个类和QuantifiedApply2OuterJoinRule的区别
+// 先执行QuantifiedApply2JoinRule，QuantifiedApply2OuterJoinRule
+// 两者的check的条件只相差一下isUseSemiAnti
+// 当isUseSemiAnti为true的时候，会使用QuantifiedApply2JoinRule，将Apply转成left semi join或者null aware left anti join
+//      那什么情况下isUseSemiAnti为true呢？只有当谓词是纯粹的InPredicate或者ExistPredicate的时候，isUseSemiAnti才为true。否则，
+//      在SqlToScalarOperatorTranslator中，Context clone的时候，会把isUseSemiAnti设置为false
+// 否则，使用QuantifiedApply2OuterJoinRule，将类转成cte + left outer join/cross join
 public class QuantifiedApply2JoinRule extends TransformationRule {
     public QuantifiedApply2JoinRule() {
         super(RuleType.TF_QUANTIFIED_APPLY_TO_JOIN,
